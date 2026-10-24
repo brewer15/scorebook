@@ -39,6 +39,8 @@ button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .cfix{display:grid;grid-template-columns:70px 1fr 56px 56px;gap:8px;align-items:center;margin:6px 0;font-size:20px}.cfix b{text-align:center;font-size:26px}
 body{padding-bottom:env(safe-area-inset-bottom)}.sheet{padding-bottom:calc(12px + env(safe-area-inset-bottom))!important}
 .big{min-height:72px;font-size:18px}.badge{background:var(--acc);color:#fff;font-weight:800;text-align:center;border-radius:10px;padding:6px;margin-top:6px}.badge.f{background:var(--ok)}
+.plan select.pc{padding:4px 2px;min-width:52px;font-size:14px}.plan select.bad{background:#fdd;border-color:#d33}
+@media print{header,button,.noprint,.sheet{display:none!important}.plan select{appearance:none;-webkit-appearance:none;border:0;background:none}body{padding:0}}
 .sheet{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--card);border-top:2px solid var(--acc);padding:12px;box-shadow:0 -6px 20px #0006;max-width:900px;margin:auto}
 .nowbat{background:#263238;color:#fff;border-radius:12px;padding:10px 12px;margin:6px 0;cursor:pointer}.nowbat.mine{background:var(--acc)}
 svg .base{stroke:var(--fg);stroke-width:2;fill:var(--card)}svg .base.on{fill:var(--warn)}
@@ -62,7 +64,7 @@ const IN_PLAY=new Set(['1B','2B','3B','HR','GO','FO','LO','PO','FC','E','SF','SH
 function blankStat(){return{PA:0,AB:0,R:0,H:0,'1B':0,'2B':0,'3B':0,HR:0,RBI:0,BB:0,HBP:0,K:0,SB:0,CS:0,SF:0,SH:0,PO:0,A:0,E:0}}
 function replay(g){
  const S={half:0,outs:0,b:0,s:0,bases:[null,null,null],halfRuns:0,order:{away:0,home:0},line:{away:[],home:[]},H:{away:0,home:0},E:{away:0,home:0},
-  gen:g.genNames||{},teams:{away:clone(g.away.roster),home:clone(g.home.roster)},pitcher:{away:null,home:null},pc:{},st:{},log:[],notice:'',over:false,capHit:false,players:{}};
+  gen:g.genNames||{},teams:{away:clone(g.away.roster),home:clone(g.home.roster)},pitcher:{away:null,home:null},pc:{},st:{},spray:[],log:[],notice:'',over:false,capHit:false,players:{}};
  const reg=()=>{for(const t of ['away','home'])for(const p of S.teams[t])S.players[p.id]={...p,team:t}};reg();
  for(const ev of g.events){S.notice='';apply(S,g,ev);reg()}
  for(const t of ['away','home'])for(let n=1;n<=9;n++){const id=t+'_gen'+n;if(S.st[id]&&!S.players[id]){const nm=((S.gen||{})[t]||{})[n]||{};S.players[id]={id,name:nm.name||'Batter '+n,num:nm.num||'',pos:'',team:t,gen:true,slot:n,named:!!nm.name}}}
@@ -76,7 +78,7 @@ function curPitcher(S,t){const id=S.pitcher[t];if(id&&S.teams[t].some(p=>p.id===
 const st=(S,id)=>id?(S.st[id]=S.st[id]||blankStat()):blankStat();
 const nm=(S,id)=>{const p=S.players[id];return p?(p.num?'#'+p.num+' ':'')+p.name:'?'};
 function lbl(S){return(S.half%2?'B':'T')+(Math.floor(S.half/2)+1)}
-function undoLabel(ev){if(!ev)return'';const P={B:'Ball',SS:'Strike sw',SL:'Strike look',F:'Foul'};switch(ev.t){case'pitch':return P[ev.k]||'Pitch';case'res':return RES[ev.r]||ev.r;case'run':return{adv:'Runner adv',score:'Run scored',out:'Runner out',SB:'Steal',CS:'Caught stealing'}[ev.a]||'Runner';case'count':return'Count fix';case'pcadj':return'Pitch '+(ev.d>0?'+':'')+ev.d;case'fld':return ev.k+' credit';case'rbi':return'RBI';case'pitcher':return'Pitcher change';case'sub':return'Sub';case'pos':return'Position';case'addp':return'Add player';case'endhalf':return'End half';case'endgame':return'End game';default:return ev.t}}
+function undoLabel(ev){if(!ev)return'';const P={B:'Ball',SS:'Strike sw',SL:'Strike look',F:'Foul'};switch(ev.t){case'pitch':return P[ev.k]||'Pitch';case'res':return RES[ev.r]||ev.r;case'run':return{adv:'Runner adv',score:'Run scored',out:'Runner out',SB:'Steal',CS:'Caught stealing'}[ev.a]||'Runner';case'count':return'Count fix';case'pcadj':return'Pitch '+(ev.d>0?'+':'')+ev.d;case'fld':return ev.k+' credit';case'rbi':return'RBI';case'pitcher':return'Pitcher change';case'sub':return'Sub';case'pos':return'Position';case'addp':return'Add player';case'endhalf':return'End half';case'endgame':return'End game';case'posset':return'Planned positions';default:return ev.t}}
 function addPitch(S,n){const t=S.half%2?'away':'home',id=curPitcher(S,t);if(id)S.pc[id]=Math.max(0,(S.pc[id]||0)+n)}
 function addRun(S,g,id,rbiId){if(S.over)return;if(g.maxRunsOn&&S.halfRuns>=g.maxRuns)return;
  const t=S.half%2?'home':'away',i=Math.floor(S.half/2);S.line[t][i]=(S.line[t][i]||0)+1;S.halfRuns++;st(S,id).R++;if(rbiId)st(S,rbiId).RBI++;
@@ -98,7 +100,7 @@ function advAll(S,n,batter,bb){const runs=[];for(let i=2;i>=0;i--){const r=S.bas
  if(batter){if(bb>=4)runs.push(batter);else S.bases[bb-1]=batter}return runs}
 function force(S,batter){const b=S.bases,runs=[];if(b[0]){if(b[1]){if(b[2])runs.push(b[2]);b[2]=b[1]}b[1]=b[0]}b[0]=batter;return runs}
 function result(S,g,r,ev){
- const bat=curBatter(S);if(!bat){S.notice='No batters in lineup';return}const id=bat.id,x=st(S,id);const fldT=S.half%2?'away':'home';
+ const bat=curBatter(S);if(!bat){S.notice='No batters in lineup';return}const id=bat.id,x=st(S,id);const fldT=S.half%2?'away':'home';if(ev.spray)S.spray.push({pid:id,r,x:ev.spray.x,y:ev.spray.y});
  x.PA++;let runs=[],rbi=true;const desc=lbl(S)+': '+nm(S,id)+' — '+RES[r];
  const catcher=()=>{if(ev.credits&&ev.credits.length)return;const c=S.teams[fldT].find(p=>p.pos==='C');if(c)st(S,c.id).PO++};
  if(ev.credits)for(const c of ev.credits){if(c.k==='E'&&r==='E')continue;st(S,c.pid)[c.k]++}
@@ -121,7 +123,7 @@ function result(S,g,r,ev){
  if(S.outs<3)for(const rr of runs)addRun(S,g,rr,rbi?id:null);
 }
 function apply(S,g,ev){
- if(S.over&&(S.ended||!['sub','pos','addp','pcadj','fld','rbi'].includes(ev.t))){return}
+ if(S.over&&(S.ended||!['sub','pos','posset','addp','pcadj','fld','rbi'].includes(ev.t))){return}
  switch(ev.t){
  case 'pitch':{addPitch(S,1);const k=ev.k;
    if(k==='B'){S.b++;S.log.push(lbl(S)+': ball ('+S.b+'-'+S.s+')');if(S.b>=4)result(S,g,'BB',{})}
@@ -142,6 +144,7 @@ function apply(S,g,ev){
  case 'sub':{const T=S.teams[ev.team],a=T.findIndex(p=>p.id===ev.out),b=T.findIndex(p=>p.id===ev.in);if(a<0||b<0)break;
    const pa=T[a],pb=T[b];pb.pos=pa.pos;pa.pos='BN';T[a]=pb;T[b]=pa;S.log.push('Sub ('+ev.team+'): '+pb.name+' for '+pa.name);break}
  case 'pos':{const p=S.teams[ev.team].find(p=>p.id===ev.pid);if(p){S.log.push('Position: '+p.name+' '+p.pos+'→'+ev.pos);p.pos=ev.pos}break}
+ case 'posset':{const T=S.teams[ev.team];for(const p of T)if(ev.map[p.id]){p.pos=ev.map[p.id]}S.log.push('Planned positions applied (inning '+ev.inn+')');break}
  case 'addp':S.teams[ev.team].push(clone(ev.p));S.log.push('Added '+ev.p.name+' ('+ev.team+')');break;
  case 'endhalf':endHalf(S,g,'manual');return;
  case 'endgame':{const t=S.half%2?'home':'away',i=Math.floor(S.half/2);S.line[t][i]=S.line[t][i]||0;
@@ -156,6 +159,49 @@ function rates(x){const TB=x['1B']+2*x['2B']+3*x['3B']+4*x.HR;const avg=x.AB?x.H
 const f3=v=>v==null?'—':(v>=1?v.toFixed(3):v.toFixed(3).replace(/^0/,''));
 function season(games){const out={};for(const g of games){const S=replay(g);for(const id in S.players){const p=S.players[id];if(p.gen&&!p.named)continue;const key=(g[p.team].name+'|'+p.name).toLowerCase();
   const o=out[key]=out[key]||{team:g[p.team].name,name:p.name,num:p.num,G:0,...blankStat()};const x=S.st[id];if(!x)continue;o.G++;for(const k in x)o[k]+=x[k]}}return out}
+/* --- spray chart --- */
+const SPRAY_RES=new Set(['1B','2B','3B','HR','GO','FO','LO','PO','FC','E','SF','SH','DP']);
+const HITS=new Set(['1B','2B','3B','HR']);
+const pkey=(g,p)=>(g[p.team].name+'|'+p.name).toLowerCase();
+function sprayFor(games,key,gameId){const out=[];for(const g of games){if(gameId&&g.id!==gameId)continue;const S=replay(g);
+ for(const s of S.spray){const p=S.players[s.pid];if(p&&pkey(g,p)===key)out.push({...s,game:g.id,date:g.date,hit:HITS.has(s.r)})}}return out}
+/* --- rotation planner --- */
+const FPOS=['P','C','1B','2B','3B','SS','LF','CF','RF'],INF=new Set(['P','C','1B','2B','3B','SS']);
+function planWarnings(plan,roster,innings){const W=[];plan=plan||{};const need=Math.min(9,roster.length);
+ for(let i=1;i<=innings;i++){const m=plan[i]||{};const seen={};
+  for(const p of roster){const v=m[p.id];if(!v){W.push({inn:i,type:'missing',pid:p.id,msg:'Inning '+i+': '+p.name+' has no position'});continue}if(v!=='BN')(seen[v]=seen[v]||[]).push(p)}
+  for(const k in seen)if(seen[k].length>1)W.push({inn:i,type:'dup',pos:k,msg:'Inning '+i+': '+k+' assigned to '+seen[k].map(p=>p.name).join(' & ')});
+  const open=FPOS.filter(k=>!seen[k]);if(Object.keys(m).length&&FPOS.length-open.length<need)W.push({inn:i,type:'open',msg:'Inning '+i+': nobody at '+open.join(', ')})}
+ return W}
+function planSummary(plan,roster,innings){const o={};for(const p of roster)o[p.id]={pid:p.id,name:p.name,played:0,bench:0,inf:0,of:0,pos:{}};
+ for(let i=1;i<=innings;i++){const m=(plan||{})[i]||{};for(const p of roster){const v=m[p.id];if(!v)continue;const x=o[p.id];if(v==='BN')x.bench++;else{x.played++;x[INF.has(v)?'inf':'of']++;x.pos[v]=(x.pos[v]||0)+1}}}return o}
+function autoRotate(roster,innings,start){const plan={},sum={};const ids=roster.map(p=>p.id),N=ids.length;
+ for(const id of ids)sum[id]={bench:0,inf:0,of:0,pos:{}};
+ for(let i=1;i<=innings;i++){const m={};const nb=Math.max(0,N-9);const rot=(i-1)*nb;
+  // bench: fewest bench so far, ties broken by rotating order
+  const order=ids.map((id,k)=>({id,k:(k-rot%N+N)%N})).sort((a,b)=>sum[a.id].bench-sum[b.id].bench||a.k-b.k);
+  const bench=new Set(order.slice(0,nb).map(o=>o.id));if(start&&i===1&&start[0])0;
+  const play=ids.filter(id=>!bench.has(id));
+  // infield spots go to those with the least infield share
+  const ni=Math.min(6,play.length);const byInf=play.slice().sort((a,b)=>(sum[a].inf-sum[a].of)-(sum[b].inf-sum[b].of)||(ids.indexOf(a)+i)%N-(ids.indexOf(b)+i)%N);
+  const grp=[[byInf.slice(0,ni),FPOS.slice(0,6)],[byInf.slice(ni),FPOS.slice(6)]];
+  for(const[ps,spots]of grp){const left=spots.slice(0,ps.length===spots.length?spots.length:Math.max(ps.length,0));const pool=ps.slice();
+   for(const sp of left){if(!pool.length)break;pool.sort((a,b)=>(sum[a].pos[sp]||0)-(sum[b].pos[sp]||0)||(sum[a].inf+sum[a].of)-(sum[b].inf+sum[b].of));const id=pool.shift();m[id]=sp}}
+  for(const id of bench)m[id]='BN';
+  for(const id of ids){const v=m[id],s=sum[id];if(v==='BN')s.bench++;else{s[INF.has(v)?'inf':'of']++;s.pos[v]=(s.pos[v]||0)+1}}
+  plan[i]=m}
+ return plan}
+/* --- leaderboard --- */
+function leaderboard(games,opt){opt=opt||{};const mine=new Set(games.filter(g=>g.myTeam).map(g=>g[g.myTeam].name.toLowerCase()));
+ const s=season(games),pit={};for(const g of games){const S=replay(g);for(const id in S.pc){if(!S.pc[id])continue;const p=S.players[id];if(!p)continue;const k=pkey(g,p);const o=pit[k]=pit[k]||{P:0,APP:0};o.P+=S.pc[id];o.APP++}}
+ const rows=[];for(const k in s){const r=s[k];if(mine.size&&!mine.has(r.team.toLowerCase()))continue;const x=rates(r),pa=r.PA,ch=r.PO+r.A+r.E;
+  rows.push({...r,key:k,...x,KR:pa?r.K/pa:null,FLD:ch?x.FLD:null,P:(pit[k]||{}).P||0,APP:(pit[k]||{}).APP||0,qual:pa>=(opt.minPA||0)})}
+ return rows}
+const LB_CATS={AVG:{l:'AVG',rate:1,f:'r'},OBP:{l:'OBP',rate:1,f:'r'},OPS:{l:'OPS',rate:1,f:'r'},H:{l:'H'},HR:{l:'HR'},RBI:{l:'RBI'},R:{l:'R'},SB:{l:'SB'},BB:{l:'BB'},
+ KR:{l:'K%',rate:1,asc:1,f:'p'},PO:{l:'PO'},A:{l:'A'},E:{l:'E',asc:1},FLD:{l:'FLD%',f:'r',fld:1},P:{l:'Pitches'},APP:{l:'Pitch app'}};
+function leaders(rows,cat){const c=LB_CATS[cat];let r=rows.filter(x=>x[cat]!=null&&(!c.rate||x.qual)&&(!c.fld||x[cat]!=null));
+ if(!c.rate&&!c.asc&&!c.fld)r=r.filter(x=>x[cat]>0);if(cat==='E')r=r.filter(x=>x.PO+x.A+x.E>0);
+ return r.sort((a,b)=>c.asc?a[cat]-b[cat]:b[cat]-a[cat])}
 /* --- pitch count rolling window (day granularity) --- */
 function dayNum(s){const[y,m,d]=s.split('-').map(Number);return Math.round(Date.UTC(y,m-1,d)/864e5)}
 function fromDay(n){const d=new Date(n*864e5);return d.toISOString().slice(0,10)}
@@ -180,7 +226,7 @@ function creditsFor(r,seq){seq=(seq||[]).filter(Boolean);if(!seq.length)return[]
   out.push({pid:seq[0],k:'A'});seq.slice(1,-1).forEach(p=>out.push({pid:p,k:'PO'},{pid:p,k:'A'}));out.push({pid:seq[seq.length-1],k:'PO'});return out}
  seq.slice(0,-1).forEach(p=>out.push({pid:p,k:'A'}));out.push({pid:seq[seq.length-1],k:'PO'});return out}
 function level(n,max,warnPct){if(!max)return 0;const p=n/max*100;return p>=100?3:p>=90?2:p>=(warnPct||75)?1:0}
-return{undoLabel,creditsFor,SEQ_RES,POS,RES,IN_PLAY,uid,clone,todayStr,newGame,player,replay,rates,f3,season,dayNum,addDays,inWindow,rolling,pitchEntries,level,blankStat,lineup}
+return{SPRAY_RES,HITS,pkey,sprayFor,FPOS,INF,planWarnings,planSummary,autoRotate,leaderboard,LB_CATS,leaders,undoLabel,creditsFor,SEQ_RES,POS,RES,IN_PLAY,uid,clone,todayStr,newGame,player,replay,rates,f3,season,dayNum,addDays,inWindow,rolling,pitchEntries,level,blankStat,lineup}
 })();
 if(typeof module!=='undefined')module.exports=Engine;
 </script>
@@ -194,8 +240,8 @@ function save(){localStorage.setItem(KEY,JSON.stringify(D))}
 const G=()=>D.games.find(g=>g.id===D.cur);
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const $=s=>document.querySelector(s);
-function push(ev){const g=G();if(!g)return;g.events.push(ev);save();render()}
-function undo(){const g=G();if(g&&g.events.length){g.events.pop();pend=null;save();render()}}
+function push(ev){const g=G();if(!g)return;let sp=false;if(ev.t==='res'&&E.SPRAY_RES.has(ev.r)){const S=E.replay(g);sp=!S.over&&wantSpray(g,S)}g.events.push(ev);if(sp)sprayPend=g.events.length-1;save();render()}
+function undo(){const g=G();if(g&&g.events.length){g.events.pop();pend=null;sprayPend=null;save();render()}}
 function undoBtn(g,cls){const l=g.events.length?E.undoLabel(g.events[g.events.length-1]):'';return`<button class="b ${cls||''} undo" onclick="undo()" ${l?'':'disabled'}>↶ Undo<small>${l?esc(l):'nothing'}</small></button>`}
 let cfix=null;
 function openFix(){const S=E.replay(G());cfix={b:S.b,s:S.s,o:S.outs,b0:S.b,s0:S.s,pc:false};render()}
@@ -204,10 +250,57 @@ function fixSheet(){const c=cfix,d=(c.b+c.s)-(c.b0+c.s0),row=(k,l,mx)=>`<div cla
  <label class="row"><input type="checkbox" ${c.pc?'checked':''} onchange="cfix.pc=this.checked;render()"> Also adjust pitch count (${d>0?'+':''}${d})</label>
  <button class="b p big" style="width:100%" onclick="saveFix()">✓ Set count</button></div>`}
 function saveFix(){const c=cfix,d=(c.b+c.s)-(c.b0+c.s0),ev={t:'count',b:c.b,s:c.s,o:c.o};if(c.pc&&d)ev.pcd=d;cfix=null;push(ev)}
-const TABS=[['game','Game'],['lineups','Lineups'],['stats','Stats'],['pitch','Pitchers'],['data','Games & Data']];
+let sprayPend=null,spv={key:'',scope:'season'},lbCat='AVG';
+function fieldSvg(pts,tap){const dots=(pts||[]).map(p=>`<circle cx="${p.x}" cy="${p.y}" r="2.6" fill="${p.hit?'#1e9e4a':'#d33'}" stroke="#fff" stroke-width=".6"><title>${esc(E.RES[p.r]||p.r)} ${esc(p.date||'')}</title></circle>`).join('');
+ return`<svg viewBox="0 0 100 100" style="width:100%;max-width:340px;display:block;margin:auto;touch-action:manipulation" ${tap?'onclick="sprayTap(event,this)"':''}>
+ <path d="M50 96 L4 50 A65 65 0 0 1 96 50 Z" fill="#3c8d3c"/><path d="M50 96 L28 74 A31 31 0 0 1 72 74 Z" fill="#b5835a"/>
+ <path d="M50 92 L64 78 L50 64 L36 78 Z" fill="#4fa24f" stroke="#fff" stroke-width=".8"/><line x1="50" y1="96" x2="4" y2="50" stroke="#fff" stroke-width=".7"/><line x1="50" y1="96" x2="96" y2="50" stroke="#fff" stroke-width=".7"/>
+ ${[[50,92],[64,78],[50,64],[36,78]].map(([x,y])=>`<rect x="${x-1.6}" y="${y-1.6}" width="3.2" height="3.2" fill="#fff" transform="rotate(45 ${x} ${y})"/>`).join('')}<circle cx="50" cy="79" r="1.6" fill="#ddd"/>${dots}</svg>`}
+function wantSpray(g,S){const s=D.settings;if(s.spray===false)return false;return !g.myTeam||S.bat===g.myTeam||!!s.sprayOpp}
+function sprayTap(e,svg){const g=G();if(sprayPend==null||!g.events[sprayPend])return;const r=svg.getBoundingClientRect();const x=Math.round((e.clientX-r.left)/r.width*1000)/10,y=Math.round((e.clientY-r.top)/r.height*1000)/10;
+ const ev=g.events[sprayPend];ev.spray={x,y,r:ev.r};sprayPend=null;save();render()}
+function spraySheet(g){const ev=g.events[sprayPend];if(!ev){sprayPend=null;return''}return`<div class="sheet"><div class="row"><b style="flex:1">Where did it go? <span class="mut">${esc(E.RES[ev.r]||ev.r)}</span></b><button class="b" onclick="sprayPend=null;render()">Skip</button></div>${fieldSvg([],true)}</div>`}
+function sprayCard(g){const s=D.settings;const sea=E.season(D.games);const mine=new Set(D.games.filter(x=>x.myTeam).map(x=>x[x.myTeam].name.toLowerCase()));
+ const keys=Object.keys(sea).filter(k=>!mine.size||mine.has(sea[k].team.toLowerCase())||s.sprayOpp).sort();if(!spv.key||!sea[spv.key])spv.key=keys[0]||'';
+ const games=D.games.filter(x=>x.events.some(e=>e.spray));const pts=spv.key?E.sprayFor(D.games,spv.key,spv.scope==='season'?null:spv.scope):[];const h=pts.filter(p=>p.hit).length;
+ return`<div class="card"><h3>Spray chart</h3><div class="row"><select style="flex:1" onchange="spv.key=this.value;render()">${keys.map(k=>`<option value="${esc(k)}" ${k===spv.key?'selected':''}>${esc(sea[k].name)} (${esc(sea[k].team)})</option>`).join('')}</select>
+ <select onchange="spv.scope=this.value;render()"><option value="season">Season</option>${games.map(x=>`<option value="${x.id}" ${spv.scope===x.id?'selected':''}>${esc(x.date)} ${esc(x.away.name)}@${esc(x.home.name)}</option>`).join('')}</select></div>
+ ${fieldSvg(pts)}<div class="mut" style="text-align:center"><span style="color:#1e9e4a">●</span> hits ${h} &nbsp; <span style="color:#d33">●</span> outs/other ${pts.length-h}</div>
+ <div class="row mut"><label><input type="checkbox" ${s.spray!==false?'checked':''} onchange="D.settings.spray=this.checked;save()"> Ask where ball went</label><label><input type="checkbox" ${s.sprayOpp?'checked':''} onchange="D.settings.sprayOpp=this.checked;save();render()"> Opponents too</label></div></div>`}
+/* rotation planner */
+function planRoster(g){const S=E.replay(g);return S.teams[g.myTeam]||[]}
+function vPlan(g){if(!g)return'<div class="card">Start a game first.</div>';if(!g.myTeam)return`<div class="card"><h3>Rotation planner</h3><p>Pick your team first:</p>${['away','home'].map(t=>`<button class="b" onclick="G().myTeam='${t}';save();render()">${esc(g[t].name)}</button>`).join(' ')}</div>`;
+ const R=planRoster(g),n=g.innings,P=g.plan=g.plan||{},W=E.planWarnings(P,R,n),Sm=E.planSummary(P,R,n);const opts=E.FPOS.concat('BN');
+ const cell=(p,i)=>{const v=(P[i]||{})[p.id]||'';const bad=W.some(w=>w.inn===i&&(w.pid===p.id||(w.type==='dup'&&w.pos===v)));return`<td><select class="pc${bad?' bad':''}" onchange="setPlan(${i},'${p.id}',this.value)"><option value=""></option>${opts.map(o=>`<option ${o===v?'selected':''}>${o}</option>`).join('')}</select></td>`};
+ return`<div class="card"><h3>Rotation — ${esc(g[g.myTeam].name)}</h3><div class="row noprint"><button class="b p" onclick="autoPlan()">Auto-rotate</button><button class="b" onclick="if(confirm('Clear plan?')){G().plan={};save();render()}">Clear</button><button class="b" onclick="window.print()">Print</button><button class="b" onclick="sharePlan()">Share</button></div>
+ <label class="row mut noprint"><input type="checkbox" ${g.planBatAll!==false?'checked':''} onchange="G().planBatAll=this.checked;save()"> Benched players keep batting (EH)</label>
+ <div class="scroll"><table class="plan"><tr><th class="l">Player</th>${Array.from({length:n},(_,k)=>`<th>${k+1}${k?`<br><button class="b sm noprint" onclick="copyPrev(${k+1})" title="copy previous inning">copy</button>`:''}</th>`).join('')}</tr>
+ ${R.map(p=>`<tr><td class="l">${esc(p.name)}</td>${Array.from({length:n},(_,k)=>cell(p,k+1)).join('')}</tr>`).join('')}</table></div>
+ ${W.length?`<div class="notice">${W.slice(0,12).map(w=>esc(w.msg)).join('<br>')}${W.length>12?'<br>…'+(W.length-12)+' more':''}</div>`:Object.keys(P).length?'<div class="mut">✓ No conflicts</div>':''}</div>
+ <div class="card"><h3>Per-player summary</h3><table><tr><th class="l">Player</th><th>Inn</th><th>Bench</th><th>IF</th><th>OF</th><th class="l">Positions</th></tr>${Object.values(Sm).map(x=>`<tr><td class="l">${esc(x.name)}</td><td>${x.played}</td><td>${x.bench}</td><td>${x.inf}</td><td>${x.of}</td><td class="l">${Object.entries(x.pos).map(([k,v])=>k+(v>1?'×'+v:'')).join(' ')}</td></tr>`).join('')}</table></div>`}
+function setPlan(i,id,v){const g=G();g.plan=g.plan||{};g.plan[i]=g.plan[i]||{};if(v)g.plan[i][id]=v;else delete g.plan[i][id];save();render()}
+function copyPrev(i){const g=G();g.plan=g.plan||{};g.plan[i]={...(g.plan[i-1]||{})};save();render()}
+function autoPlan(){const g=G();if(Object.keys(g.plan||{}).length&&!confirm('Replace current plan with an auto-rotation?'))return;g.plan=E.autoRotate(planRoster(g),g.innings);save();render()}
+function planText(g){const R=planRoster(g),P=g.plan||{};let s=`Defensive rotation — ${g[g.myTeam].name} ${g.date}\n`;for(let i=1;i<=g.innings;i++){const m=P[i]||{};s+=`\nInning ${i}: `+E.FPOS.map(k=>{const p=R.find(p=>m[p.id]===k);return k+' '+(p?p.name:'—')}).join(', ');const b=R.filter(p=>m[p.id]==='BN').map(p=>p.name);if(b.length)s+=`; Bench: ${b.join(', ')}`}return s}
+function sharePlan(){shareText('Rotation',planText(G()))}
+function shareText(title,t){if(navigator.share)navigator.share({title,text:t}).catch(()=>{});else if(navigator.clipboard)navigator.clipboard.writeText(t).then(()=>alert('Copied'),()=>prompt('Copy:',t));else prompt('Copy:',t)}
+function planPrompt(g,S){const me=g.myTeam,i=S.inning,m=(g.plan||{})[i];if(!m||!Object.keys(m).length||S.fld!==me)return'';if((g.planSkip||{})[i]||g.events.some(e=>e.t==='posset'&&e.inn===i))return'';
+ return`<div class="notice">Inning ${i} rotation is planned. <button class="b sm p" onclick="applyPlan()">Apply positions</button> <button class="b sm" onclick="G().planSkip=Object.assign(G().planSkip||{},{${i}:1});save();render()">Not now</button></div>`}
+function applyPlan(){const g=G(),S=E.replay(g),i=S.inning,m=(g.plan||{})[i]||{},map={};for(const p of S.teams[g.myTeam]){const v=m[p.id];if(!v)continue;const nv=v==='BN'?(g.planBatAll!==false?'EH':'BN'):v;if(nv!==p.pos)map[p.id]=nv}
+ push({t:'posset',team:g.myTeam,inn:i,map})}
+/* leaderboard */
+function lbFmt(c,v){const k=E.LB_CATS[c];if(v==null)return'—';return k.f==='r'?E.f3(v):k.f==='p'?(v*100).toFixed(0)+'%':v}
+function vLeaders(){const s=D.settings,minPA=s.minPA==null?5:+s.minPA,rows=E.leaderboard(D.games,{minPA}),L=E.leaders(rows,lbCat),c=E.LB_CATS[lbCat];
+ return`<div class="card"><h3>Season leaders</h3><div class="row mut">Min PA for rate stats <input type="number" min="0" style="width:64px" value="${minPA}" onchange="D.settings.minPA=+this.value;save();render()"> <button class="b sm" onclick="shareText('Leaders',lbText())">Copy/Share recap</button></div>
+ <div class="row" style="flex-wrap:wrap;gap:4px">${Object.keys(E.LB_CATS).map(k=>`<button class="b sm ${k===lbCat?'p':''}" onclick="lbCat='${k}';render()">${E.LB_CATS[k].l}</button>`).join('')}</div>
+ <table><tr><th>#</th><th class="l">Player</th><th>${c.l}</th><th>PA</th><th>G</th></tr>${L.map((r,i)=>`<tr><td>${i+1}</td><td class="l">${esc(r.name)}</td><td><b>${lbFmt(lbCat,r[lbCat])}</b></td><td>${r.PA}</td><td>${r.G}</td></tr>`).join('')||'<tr><td colspan="5" class="mut">No qualifying players</td></tr>'}</table>
+ ${c.rate?`<div class="mut">Players under ${minPA} PA are hidden for ${c.l}.</div>`:''}</div>`}
+function lbText(){const minPA=D.settings.minPA==null?5:+D.settings.minPA,rows=E.leaderboard(D.games,{minPA});let t=`Season leaders (${D.games.length} games, min ${minPA} PA for rates)\n`;
+ for(const k of Object.keys(E.LB_CATS)){const L=E.leaders(rows,k).slice(0,3);if(L.length)t+=`${E.LB_CATS[k].l}: `+L.map(r=>`${r.name} ${lbFmt(k,r[k])}`).join(', ')+'\n'}return t}
+const TABS=[['game','Game'],['lineups','Lineups'],['plan','Rotation'],['stats','Stats'],['leaders','Leaders'],['pitch','Pitchers'],['data','Data']];
 function nav(){$('#nav').innerHTML=TABS.map(([k,v])=>`<button class="${k===tab?'on':''}" onclick="tab='${k}';render()">${v}</button>`).join('')}
-function render(){nav();const g=G();if(!g||tab!=='game')cfix=null;
- $('#app').innerHTML=(!g&&tab!=='data'&&tab!=='pitch'&&tab!=='stats')?newGameForm():({game:vGame,lineups:vLineups,stats:vStats,pitch:vPitch,data:vData}[tab])(g)+(cfix&&g?fixSheet():'')}
+function render(){nav();const g=G();if(!g||tab!=='game'){cfix=null;sprayPend=null}
+ $('#app').innerHTML=(!g&&!['data','pitch','stats','leaders'].includes(tab))?newGameForm():({game:vGame,lineups:vLineups,plan:vPlan,stats:vStats,leaders:vLeaders,pitch:vPitch,data:vData}[tab])(g)+(cfix&&g?fixSheet():'')+(sprayPend!=null&&g?spraySheet(g):'')}
 let pend=null,endSheet=false;
 function banner(g,S){const b=S.batter;if(!b)return'';const t=S.bat,L=E.lineup(S,t);let nx;
  if(L.length)nx=L[(S.order[t]+1)%L.length];else{const n=(S.order[t]+1)%9+1,m=((g.genNames||{})[t]||{})[n]||{};nx={name:m.name||'Batter '+n}}
@@ -272,7 +365,7 @@ function vBat(g,S){const b=S.batter,L=E.lineup(S,S.bat),nx=L.length?L[(S.order[S
 function vField(g,S){const me=g.myTeam,pid=S.curPitcher[me],b=S.batter;const ps=S.teams[me];
  const s=D.settings,rm=rollMap(),p=pid&&S.players[pid],r=p&&rm[(g[me].name+'|'+p.name).toLowerCase()];const n=pid?(S.pc[pid]||0):0;
  const lv=Math.max(E.level(n,+s.gameMax||0,s.warnPct),r?E.level(r.total,+s.weeklyMax,s.warnPct):0);
- return`${banner(g,S)}${myToggle(g)}<div class="badge f">🧤 FIELDING</div>${mini(g,S)}
+ return`${banner(g,S)}${myToggle(g)}<div class="badge f">🧤 FIELDING</div>${mini(g,S)}${planPrompt(g,S)}
  <div class="card"><div class="row"><select style="flex:1" onchange="push({t:'pitcher',team:'${me}',pid:this.value})"><option value="">Pick pitcher…</option>${ps.map(x=>`<option value="${x.id}" ${x.id===pid?'selected':''}>${esc(x.name)}${x.pos==='P'?' (P)':''}</option>`).join('')}</select></div>
   ${pid?`<div class="row"><span class="pill s${lv}" style="font-size:22px;padding:6px 16px">${n}</span><span>pitches today${s.gameMax?' / '+s.gameMax:''}<br><span class="mut">7-day: ${r?r.total:n}${s.weeklyMax?' / '+s.weeklyMax:''}${r&&r.drops[0]?` · −${r.drops[0].count} on ${r.drops[0].date}`:''}</span></span>
    <span style="margin-left:auto"><button class="b sm" onclick="push({t:'pcadj',pid:'${pid}',d:-1})">−</button> <button class="b sm" onclick="push({t:'pcadj',pid:'${pid}',d:1})">+</button></span></div>${lv===3?'<div class="notice over">Pitch limit reached!</div>':''}`:''}</div>
@@ -365,7 +458,7 @@ function statTables(rows){const R=rows.map(r=>({...r,...E.rates(r)}));
  ${R.map(r=>`<tr><td class="l">${esc(r.name)} <span class="mut">${esc(r.team)}</span></td>${['G','PA','AB','R','H','1B','2B','3B','HR','RBI','BB','HBP','K','SB'].map(k=>`<td>${r[k]??''}</td>`).join('')}${['AVG','OBP','SLG','OPS'].map(k=>`<td>${E.f3(r[k])}</td>`).join('')}</tr>`).join('')}</table></div>
  <h3>Fielding</h3><div class="scroll"><table><tr><th class="l">Player</th><th>PO</th><th>A</th><th>E</th><th>FLD%</th></tr>${R.map(r=>`<tr><td class="l">${esc(r.name)} <span class="mut">${esc(r.team)}</span></td><td>${r.PO}</td><td>${r.A}</td><td>${r.E}</td><td>${E.f3(r.FLD)}</td></tr>`).join('')}</table></div>`}
 function vStats(g){let h='';if(g){const S=E.replay(g);const rows=Object.keys(S.players).map(id=>({name:S.players[id].name,team:g[S.players[id].team].name,G:1,...E.blankStat(),...(S.st[id]||{})}));h+=`<div class="card"><h3>This game</h3>${statTables(rows)}</div>`}
- const se=Object.values(E.season(D.games));return h+`<div class="card"><h3>Season totals (${D.games.length} games)</h3>${statTables(se)}</div>`}
+ const se=Object.values(E.season(D.games));return sprayCard(g)+h+`<div class="card"><h3>Season totals (${D.games.length} games)</h3>${statTables(se)}</div>`}
 function vPitch(){const s=D.settings,m=rollMap(),today=E.todayStr();const list=Object.values(m).sort((a,b)=>b.total-a.total);
  return`<div class="card"><h3>Pitch limits</h3><div class="row">Weekly max (rolling 7 days) <input type="number" style="width:80px" value="${s.weeklyMax}" onchange="D.settings.weeklyMax=+this.value||'';save();render()">
   Per-game max <input type="number" style="width:80px" placeholder="none" value="${s.gameMax}" onchange="D.settings.gameMax=+this.value||'';save();render()">
