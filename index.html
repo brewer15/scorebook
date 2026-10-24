@@ -33,7 +33,11 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px
 .pill{display:inline-block;padding:3px 9px;border-radius:999px;font-weight:700;color:#fff;font-size:13px}
 .s0{background:var(--ok)}.s1{background:var(--warn);color:#111}.s2{background:var(--hi)}.s3{background:var(--bad)}
 .log{max-height:260px;overflow:auto;font-size:13px}.log div{padding:3px 0;border-bottom:1px dashed var(--bd)}
-#undo{position:fixed;right:12px;bottom:12px;z-index:9;border-radius:999px;padding:14px 22px;box-shadow:0 3px 10px #0005}
+button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.undo{background:#7a2d00!important;color:#fff!important;border-color:#c55!important}.undo small{display:block;font-size:11px;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.undo:disabled{opacity:.35}
+.tapc{cursor:pointer;text-decoration:underline dotted;text-underline-offset:4px}
+.cfix{display:grid;grid-template-columns:70px 1fr 56px 56px;gap:8px;align-items:center;margin:6px 0;font-size:20px}.cfix b{text-align:center;font-size:26px}
+body{padding-bottom:env(safe-area-inset-bottom)}.sheet{padding-bottom:calc(12px + env(safe-area-inset-bottom))!important}
 .big{min-height:72px;font-size:18px}.badge{background:var(--acc);color:#fff;font-weight:800;text-align:center;border-radius:10px;padding:6px;margin-top:6px}.badge.f{background:var(--ok)}
 .sheet{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--card);border-top:2px solid var(--acc);padding:12px;box-shadow:0 -6px 20px #0006;max-width:900px;margin:auto}
 .nowbat{background:#263238;color:#fff;border-radius:12px;padding:10px 12px;margin:6px 0;cursor:pointer}.nowbat.mine{background:var(--acc)}
@@ -41,7 +45,6 @@ svg .base{stroke:var(--fg);stroke-width:2;fill:var(--card)}svg .base.on{fill:var
 </style></head><body>
 <header><nav id="nav"></nav></header>
 <main id="app"></main>
-<button id="undo" class="b r">↶ Undo</button>
 
 <script id="engine">
 /* ===== Pure engine (no DOM) — tested headless with node ===== */
@@ -73,6 +76,7 @@ function curPitcher(S,t){const id=S.pitcher[t];if(id&&S.teams[t].some(p=>p.id===
 const st=(S,id)=>id?(S.st[id]=S.st[id]||blankStat()):blankStat();
 const nm=(S,id)=>{const p=S.players[id];return p?(p.num?'#'+p.num+' ':'')+p.name:'?'};
 function lbl(S){return(S.half%2?'B':'T')+(Math.floor(S.half/2)+1)}
+function undoLabel(ev){if(!ev)return'';const P={B:'Ball',SS:'Strike sw',SL:'Strike look',F:'Foul'};switch(ev.t){case'pitch':return P[ev.k]||'Pitch';case'res':return RES[ev.r]||ev.r;case'run':return{adv:'Runner adv',score:'Run scored',out:'Runner out',SB:'Steal',CS:'Caught stealing'}[ev.a]||'Runner';case'count':return'Count fix';case'pcadj':return'Pitch '+(ev.d>0?'+':'')+ev.d;case'fld':return ev.k+' credit';case'rbi':return'RBI';case'pitcher':return'Pitcher change';case'sub':return'Sub';case'pos':return'Position';case'addp':return'Add player';case'endhalf':return'End half';case'endgame':return'End game';default:return ev.t}}
 function addPitch(S,n){const t=S.half%2?'away':'home',id=curPitcher(S,t);if(id)S.pc[id]=Math.max(0,(S.pc[id]||0)+n)}
 function addRun(S,g,id,rbiId){if(S.over)return;if(g.maxRunsOn&&S.halfRuns>=g.maxRuns)return;
  const t=S.half%2?'home':'away',i=Math.floor(S.half/2);S.line[t][i]=(S.line[t][i]||0)+1;S.halfRuns++;st(S,id).R++;if(rbiId)st(S,rbiId).RBI++;
@@ -134,6 +138,7 @@ function apply(S,g,ev){
  case 'fld':{const x=st(S,ev.pid);x[ev.k]=Math.max(0,x[ev.k]+(ev.d||1));if(ev.k==='E'){const t=S.players[ev.pid]&&S.players[ev.pid].team;if(t)S.E[t]+=(ev.d||1)}S.log.push(ev.k+' '+nm(S,ev.pid));break}
  case 'pitcher':S.pitcher[ev.team]=ev.pid;S.log.push('Pitching change ('+ev.team+'): '+nm(S,ev.pid));break;
  case 'pcadj':{const id=ev.pid;S.pc[id]=Math.max(0,(S.pc[id]||0)+ev.d);break}
+ case 'count':{S.b=Math.max(0,Math.min(3,ev.b|0));S.s=Math.max(0,Math.min(2,ev.s|0));if(ev.o!=null)S.outs=Math.max(0,Math.min(3,ev.o|0));if(ev.pcd)addPitch(S,ev.pcd);S.log.push(lbl(S)+': count corrected to '+S.b+'-'+S.s+', '+S.outs+' out'+(ev.pcd?' (pitches '+(ev.pcd>0?'+':'')+ev.pcd+')':''));break}
  case 'sub':{const T=S.teams[ev.team],a=T.findIndex(p=>p.id===ev.out),b=T.findIndex(p=>p.id===ev.in);if(a<0||b<0)break;
    const pa=T[a],pb=T[b];pb.pos=pa.pos;pa.pos='BN';T[a]=pb;T[b]=pa;S.log.push('Sub ('+ev.team+'): '+pb.name+' for '+pa.name);break}
  case 'pos':{const p=S.teams[ev.team].find(p=>p.id===ev.pid);if(p){S.log.push('Position: '+p.name+' '+p.pos+'→'+ev.pos);p.pos=ev.pos}break}
@@ -175,7 +180,7 @@ function creditsFor(r,seq){seq=(seq||[]).filter(Boolean);if(!seq.length)return[]
   out.push({pid:seq[0],k:'A'});seq.slice(1,-1).forEach(p=>out.push({pid:p,k:'PO'},{pid:p,k:'A'}));out.push({pid:seq[seq.length-1],k:'PO'});return out}
  seq.slice(0,-1).forEach(p=>out.push({pid:p,k:'A'}));out.push({pid:seq[seq.length-1],k:'PO'});return out}
 function level(n,max,warnPct){if(!max)return 0;const p=n/max*100;return p>=100?3:p>=90?2:p>=(warnPct||75)?1:0}
-return{creditsFor,SEQ_RES,POS,RES,IN_PLAY,uid,clone,todayStr,newGame,player,replay,rates,f3,season,dayNum,addDays,inWindow,rolling,pitchEntries,level,blankStat,lineup}
+return{undoLabel,creditsFor,SEQ_RES,POS,RES,IN_PLAY,uid,clone,todayStr,newGame,player,replay,rates,f3,season,dayNum,addDays,inWindow,rolling,pitchEntries,level,blankStat,lineup}
 })();
 if(typeof module!=='undefined')module.exports=Engine;
 </script>
@@ -190,11 +195,19 @@ const G=()=>D.games.find(g=>g.id===D.cur);
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const $=s=>document.querySelector(s);
 function push(ev){const g=G();if(!g)return;g.events.push(ev);save();render()}
-$('#undo').onclick=()=>{const g=G();if(g&&g.events.length){g.events.pop();save();render()}};
+function undo(){const g=G();if(g&&g.events.length){g.events.pop();pend=null;save();render()}}
+function undoBtn(g,cls){const l=g.events.length?E.undoLabel(g.events[g.events.length-1]):'';return`<button class="b ${cls||''} undo" onclick="undo()" ${l?'':'disabled'}>↶ Undo<small>${l?esc(l):'nothing'}</small></button>`}
+let cfix=null;
+function openFix(){const S=E.replay(G());cfix={b:S.b,s:S.s,o:S.outs,b0:S.b,s0:S.s,pc:false};render()}
+function fixSheet(){const c=cfix,d=(c.b+c.s)-(c.b0+c.s0),row=(k,l,mx)=>`<div class="cfix"><span>${l}</span><b>${c[k]}</b><button class="b" onclick="cfix.${k}=Math.max(0,cfix.${k}-1);render()">−</button><button class="b" onclick="cfix.${k}=Math.min(${mx},cfix.${k}+1);render()">+</button></div>`;
+ return`<div class="sheet"><div class="row"><b style="flex:1">Fix count</b><button class="b sm" onclick="cfix=null;render()">Cancel</button></div>${row('b','Balls',3)}${row('s','Strikes',2)}${row('o','Outs',2)}
+ <label class="row"><input type="checkbox" ${c.pc?'checked':''} onchange="cfix.pc=this.checked;render()"> Also adjust pitch count (${d>0?'+':''}${d})</label>
+ <button class="b p big" style="width:100%" onclick="saveFix()">✓ Set count</button></div>`}
+function saveFix(){const c=cfix,d=(c.b+c.s)-(c.b0+c.s0),ev={t:'count',b:c.b,s:c.s,o:c.o};if(c.pc&&d)ev.pcd=d;cfix=null;push(ev)}
 const TABS=[['game','Game'],['lineups','Lineups'],['stats','Stats'],['pitch','Pitchers'],['data','Games & Data']];
 function nav(){$('#nav').innerHTML=TABS.map(([k,v])=>`<button class="${k===tab?'on':''}" onclick="tab='${k}';render()">${v}</button>`).join('')}
-function render(){nav();const g=G();$('#undo').style.display=(tab==='game'&&g&&g.events.length)?'':'none';
- $('#app').innerHTML=(!g&&tab!=='data'&&tab!=='pitch'&&tab!=='stats')?newGameForm():({game:vGame,lineups:vLineups,stats:vStats,pitch:vPitch,data:vData}[tab])(g)}
+function render(){nav();const g=G();if(!g||tab!=='game')cfix=null;
+ $('#app').innerHTML=(!g&&tab!=='data'&&tab!=='pitch'&&tab!=='stats')?newGameForm():({game:vGame,lineups:vLineups,stats:vStats,pitch:vPitch,data:vData}[tab])(g)+(cfix&&g?fixSheet():'')}
 let pend=null,endSheet=false;
 function banner(g,S){const b=S.batter;if(!b)return'';const t=S.bat,L=E.lineup(S,t);let nx;
  if(L.length)nx=L[(S.order[t]+1)%L.length];else{const n=(S.order[t]+1)%9+1,m=((g.genNames||{})[t]||{})[n]||{};nx={name:m.name||'Batter '+n}}
@@ -242,16 +255,16 @@ function vFinal(g,S){const F=finalData(g,S),ord=g.myTeam==='home'?['home','away'
 const NUM={P:1,C:2,'1B':3,'2B':4,'3B':5,SS:6,LF:7,CF:8,RF:9};
 function myToggle(g){return`${endBtn()}<div class="row mut">My team: ${['away','home'].map(t=>`<button class="b sm ${g.myTeam===t?'p':''}" onclick="G().myTeam='${t}';save();render()">${esc(g[t].name)}</button>`).join('')}<button class="b sm ${!g.myTeam?'p':''}" onclick="G().myTeam='';save();render()">Full view</button></div>`}
 function mini(g,S){return`<div class="card sb" style="padding:6px 10px">${diamond(S.bases)}<div style="flex:1"><div class="cnt">${esc(g.away.name)} ${S.R.away} – ${esc(g.home.name)} ${S.R.home}</div>
- <div class="cnt" style="font-size:19px">${S.half%2?'▼':'▲'}${S.inning} · <span style="color:var(--acc)">${S.b}-${S.s}</span> · ${S.outs} out${g.maxRunsOn?` · <span class="mut">${S.halfRuns}/${g.maxRuns} R</span>`:''}</div></div></div>
+ <div class="cnt" style="font-size:19px">${S.half%2?'▼':'▲'}${S.inning} · <span class="tapc" onclick="openFix()" style="color:var(--acc)">${S.b}-${S.s} · ${S.outs} out ✎</span>${g.maxRunsOn?` · <span class="mut">${S.halfRuns}/${g.maxRuns} R</span>`:''}</div></div></div>
  ${S.notice?`<div class="notice">${esc(S.notice)}</div>`:''}`}
-const PB=`<div class="grid" style="grid-template-columns:repeat(4,1fr)"><button class="b big" onclick="push({t:'pitch',k:'B'})">Ball</button><button class="b big" onclick="push({t:'pitch',k:'SS'})">Strike<br><small>swing</small></button><button class="b big" onclick="push({t:'pitch',k:'SL'})">Strike<br><small>look</small></button><button class="b big" onclick="push({t:'pitch',k:'F'})">Foul</button></div>`;
+const PBf=g=>`<div class="grid" style="grid-template-columns:repeat(5,1fr)"><button class="b big" onclick="push({t:'pitch',k:'B'})">Ball</button><button class="b big" onclick="push({t:'pitch',k:'SS'})">Strike<br><small>swing</small></button><button class="b big" onclick="push({t:'pitch',k:'SL'})">Strike<br><small>look</small></button><button class="b big" onclick="push({t:'pitch',k:'F'})">Foul</button>${undoBtn(g,'big')}</div>`;
 const RB=(k,l,c)=>`<button class="b ${c||''}" onclick="res('${k}')">${l}</button>`;
 function runnersCard(S){const rs=S.bases.map((r,i)=>r?`<div class="row"><b style="width:40px">${['1st','2nd','3rd'][i]}</b><span style="flex:1">${esc(S.players[r]?.name)}</span>${['adv','score','out','SB','CS'].map(a=>`<button class="b sm" onclick="push({t:'run',base:${i},a:'${a}'})">${{adv:'Adv',score:'Score',out:'Out',SB:'SB',CS:'CS'}[a]}</button>`).join('')}</div>`:'').join('');return rs?`<div class="card"><h3>Runners</h3>${rs}</div>`:''}
 function todayLine(x){x=x||E.blankStat();const r=E.rates(x);return`${x.H}-for-${x.AB}${x['2B']?`, ${x['2B']} 2B`:''}${x['3B']?`, ${x['3B']} 3B`:''}${x.HR?`, ${x.HR} HR`:''}${x.RBI?`, ${x.RBI} RBI`:''}${x.R?`, ${x.R} R`:''}${x.BB?`, ${x.BB} BB`:''}${x.HBP?`, ${x.HBP} HBP`:''}${x.K?`, ${x.K} K`:''}${x.SB?`, ${x.SB} SB`:''} <span class="mut">(PA ${x.PA}, AVG ${E.f3(r.AVG)})</span>`}
 function lastLog(S){return`<div class="card"><div class="log" style="max-height:120px">${S.log.slice(-6).reverse().map(l=>`<div>${esc(l)}</div>`).join('')||'<span class="mut">No plays yet</span>'}</div></div>`}
 function vBat(g,S){const b=S.batter,L=E.lineup(S,S.bat),nx=L.length?L[(S.order[S.bat]+1)%L.length]:null;
  return`${banner(g,S)}${myToggle(g)}<div class="badge">🏏 BATTING</div>${mini(g,S)}
- <div class="card">${PB}</div>
+ <div class="card">${PBf(g)}</div>
  <div class="card"><h3>Result</h3><div class="grid">${RB('1B','1B','p')}${RB('2B','2B','p')}${RB('3B','3B','p')}${RB('HR','HR','p')}${RB('BB','BB')}${RB('HBP','HBP')}${RB('KS','K swing')}${RB('KL','K look')}
  ${RB('GO','Ground out')}${RB('FO','Fly out')}${RB('LO','Line out')}${RB('PO','Pop out')}${RB('FC','FC')}${RB('SF','Sac fly')}${RB('SH','Sac bunt')}${RB('DP','DP')}</div>
  <div class="row" style="margin-top:6px"><button class="b" style="flex:1" onclick="push({t:'res',r:'E'})">Reached on error</button><button class="b sm" onclick="rbi(1)">RBI +1</button><button class="b sm" onclick="rbi(-1)">RBI −1</button></div></div>
@@ -263,7 +276,7 @@ function vField(g,S){const me=g.myTeam,pid=S.curPitcher[me],b=S.batter;const ps=
  <div class="card"><div class="row"><select style="flex:1" onchange="push({t:'pitcher',team:'${me}',pid:this.value})"><option value="">Pick pitcher…</option>${ps.map(x=>`<option value="${x.id}" ${x.id===pid?'selected':''}>${esc(x.name)}${x.pos==='P'?' (P)':''}</option>`).join('')}</select></div>
   ${pid?`<div class="row"><span class="pill s${lv}" style="font-size:22px;padding:6px 16px">${n}</span><span>pitches today${s.gameMax?' / '+s.gameMax:''}<br><span class="mut">7-day: ${r?r.total:n}${s.weeklyMax?' / '+s.weeklyMax:''}${r&&r.drops[0]?` · −${r.drops[0].count} on ${r.drops[0].date}`:''}</span></span>
    <span style="margin-left:auto"><button class="b sm" onclick="push({t:'pcadj',pid:'${pid}',d:-1})">−</button> <button class="b sm" onclick="push({t:'pcadj',pid:'${pid}',d:1})">+</button></span></div>${lv===3?'<div class="notice over">Pitch limit reached!</div>':''}`:''}</div>
- <div class="card"><div class="mut">Batter: ${b?esc((b.num?'#'+b.num+' ':'')+b.name):'—'}</div>${PB}</div>
+ <div class="card"><div class="mut">Batter: ${b?esc((b.num?'#'+b.num+' ':'')+b.name):'—'}</div>${PBf(g)}</div>
  <div class="card"><h3>Result <span class="mut">(outs ask who made the play)</span></h3><div class="grid">${RB('GO','Ground out','p')}${RB('FO','Fly out','p')}${RB('LO','Line out','p')}${RB('PO','Pop out','p')}
  ${RB('1B','1B')}${RB('2B','2B')}${RB('3B','3B')}${RB('HR','HR')}${RB('BB','BB')}${RB('HBP','HBP')}${RB('KS','K swing')}${RB('KL','K look')}${RB('FC','FC')}${RB('SF','Sac fly')}${RB('SH','Sac bunt')}${RB('DP','DP')}</div>
  <button class="b" style="width:100%;margin-top:6px" onclick="res('E')">Error (pick fielder)</button></div>
@@ -306,14 +319,14 @@ function vFull(g){const S=E.replay(g),inn=Math.max(g.innings,S.inning);
   ${['adv','score','out','SB','CS'].map(a=>`<button class="b sm" onclick="push({t:'run',base:${i},a:'${a}'})">${{adv:'Adv',score:'Score',out:'Out',SB:'SB',CS:'CS'}[a]}</button>`).join('')}</div>`:'').join('')||'<span class="mut">Bases empty</span>';
  return`${banner(g,S)}${myToggle(g)}<div class="card scroll">${ls}</div>
  ${S.notice?`<div class="notice ${S.over?'over':''}">${esc(S.notice)}</div>`:''}${S.over&&!S.notice?`<div class="notice over">${esc(S.overMsg)}</div>`:''}
- <div class="card sb">${diamond(S.bases)}<div><div class="cnt">${S.half%2?'▼':'▲'} ${S.inning} &nbsp; ${S.b}-${S.s} &nbsp; ${S.outs} out</div>
+ <div class="card sb">${diamond(S.bases)}<div><div class="cnt">${S.half%2?'▼':'▲'} ${S.inning} &nbsp; <span class="tapc" onclick="openFix()">${S.b}-${S.s} &nbsp; ${S.outs} out ✎</span></div>
   <div>At bat: <b>${bt?esc((bt.num?'#'+bt.num+' ':'')+bt.name):'(set lineup)'}</b> <span class="mut">${esc(g[S.bat].name)}</span></div>
   ${g.maxRunsOn?`<div class="mut">Runs this half: ${S.halfRuns}/${g.maxRuns}</div>`:''}</div></div>
  <div class="card"><div class="row">Pitching (${esc(g[S.fld].name)}): <select onchange="push({t:'pitcher',team:'${S.fld}',pid:this.value})">${opt(S.teams[S.fld],pid)}</select>
   ${pid?pcPill(S.pc[pid]||0,pid,S)+` <button class="b sm" onclick="push({t:'pcadj',pid:'${pid}',d:-1})">−</button><button class="b sm" onclick="push({t:'pcadj',pid:'${pid}',d:1})">+</button>`:'<span class="mut">pick a pitcher</span>'}</div>
   <div class="grid">
   <button class="b" onclick="push({t:'pitch',k:'B'})">Ball</button><button class="b" onclick="push({t:'pitch',k:'SS'})">Strike (sw)</button>
-  <button class="b" onclick="push({t:'pitch',k:'SL'})">Strike (look)</button><button class="b" onclick="push({t:'pitch',k:'F'})">Foul</button></div></div>
+  <button class="b" onclick="push({t:'pitch',k:'SL'})">Strike (look)</button><button class="b" onclick="push({t:'pitch',k:'F'})">Foul</button></div><div style="margin-top:6px">${undoBtn(g,'big" style="width:100%')}</div></div>
  <div class="card"><h3>Result of at-bat</h3><div class="grid">${R('1B','1B','p')}${R('2B','2B','p')}${R('3B','3B','p')}${R('HR','HR','p')}${R('BB','BB')}${R('HBP','HBP')}${R('KS','K swing')}${R('KL','K look')}
   ${R('GO','Groundout')}${R('FO','Flyout')}${R('LO','Lineout')}${R('PO','Popout')}${R('FC','FC')}${R('SF','Sac fly')}${R('SH','Sac bunt')}${R('DP','Double play')}</div>
   <div class="row" style="margin-top:6px">Error by <select id="errF" onchange="sel.err=this.value">${opt(fl,sel.err)}</select><button class="b" onclick="res('E')">Reached on error</button></div></div>
