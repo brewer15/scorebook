@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Scorebook</title>
+<link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#1565c0">
+<link rel="apple-touch-icon" href="apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="Scorebook">
+<style>
+:root{--bg:#f4f6f8;--card:#fff;--fg:#111;--mut:#667;--bd:#d5dae0;--acc:#1565c0;--ok:#2e7d32;--warn:#f9a825;--hi:#ef6c00;--bad:#c62828;--btn:#e8edf3}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1216;--card:#1a1f26;--fg:#eef;--mut:#9aa;--bd:#2c343e;--acc:#64b5f6;--btn:#26303b}}
+*{box-sizing:border-box}body{margin:0;font:15px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--fg);padding-bottom:70px}
+header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--bd)}
+nav{display:flex;overflow-x:auto}nav button{flex:1;border:0;background:none;color:var(--fg);padding:12px 8px;font-weight:600;border-bottom:3px solid transparent;white-space:nowrap}
+nav button.on{border-color:var(--acc);color:var(--acc)}
+main{max-width:900px;margin:auto;padding:8px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:10px;margin:8px 0}
+h3{margin:4px 0 8px;font-size:16px}
+button,select,input{font:inherit;color:var(--fg)}
+.b{background:var(--btn);border:1px solid var(--bd);border-radius:10px;padding:12px 6px;font-weight:600;min-height:48px;cursor:pointer}
+.b:active{transform:scale(.97)}.b.p{background:var(--acc);color:#fff;border-color:var(--acc)}.b.r{background:var(--bad);color:#fff}
+.b.sm{min-height:34px;padding:6px 8px;font-size:13px}
+.grid{display:grid;gap:6px;grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g5{grid-template-columns:repeat(5,1fr)}
+@media(max-width:480px){.grid{grid-template-columns:repeat(3,1fr)}}
+input,select{background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:8px}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px solid var(--bd);padding:5px 4px;text-align:center}td.l,th.l{text-align:left}
+.scroll{overflow-x:auto}
+.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:4px 0}
+.notice{background:var(--hi);color:#fff;padding:10px;border-radius:10px;font-weight:700;margin:6px 0}
+.over{background:var(--bad)}
+.sb{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.cnt{font-size:22px;font-weight:800}.mut{color:var(--mut);font-size:13px}
+.pill{display:inline-block;padding:3px 9px;border-radius:999px;font-weight:700;color:#fff;font-size:13px}
+.s0{background:var(--ok)}.s1{background:var(--warn);color:#111}.s2{background:var(--hi)}.s3{background:var(--bad)}
+.log{max-height:260px;overflow:auto;font-size:13px}.log div{padding:3px 0;border-bottom:1px dashed var(--bd)}
+#undo{position:fixed;right:12px;bottom:12px;z-index:9;border-radius:999px;padding:14px 22px;box-shadow:0 3px 10px #0005}
+.big{min-height:72px;font-size:18px}.badge{background:var(--acc);color:#fff;font-weight:800;text-align:center;border-radius:10px;padding:6px;margin-top:6px}.badge.f{background:var(--ok)}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--card);border-top:2px solid var(--acc);padding:12px;box-shadow:0 -6px 20px #0006;max-width:900px;margin:auto}
+svg .base{stroke:var(--fg);stroke-width:2;fill:var(--card)}svg .base.on{fill:var(--warn)}
+</style></head><body>
+<header><nav id="nav"></nav></header>
+<main id="app"></main>
+<button id="undo" class="b r">↶ Undo</button>
+
+<script id="engine">
+/* ===== Pure engine (no DOM) — tested headless with node ===== */
+const Engine=(function(){
+const POS=['P','C','1B','2B','3B','SS','LF','CF','RF','DH','EH','BN'];
+const uid=()=>Math.random().toString(36).slice(2,10);
+const clone=o=>JSON.parse(JSON.stringify(o));
+function todayStr(d){d=d||new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function newGame(o){o=o||{};return{id:o.id||uid(),date:o.date||todayStr(),innings:o.innings||6,maxRunsOn:o.maxRunsOn!==false,maxRuns:o.maxRuns||5,
+ myTeam:o.myTeam||'',away:{name:o.awayName||'Away',roster:o.away||[]},home:{name:o.homeName||'Home',roster:o.home||[]},events:[]}}
+const player=(name,num,pos)=>({id:uid(),name,num:num||'',pos:pos||'BN'});
+const RES={'1B':'Single','2B':'Double','3B':'Triple','HR':'Home run','BB':'Walk','HBP':'Hit by pitch','KS':'K swinging','KL':'K looking',
+ 'GO':'Groundout','FO':'Flyout','LO':'Lineout','PO':'Popout','FC':"Fielder's choice",'E':'Reached on error','SF':'Sac fly','SH':'Sac bunt','DP':'Double play'};
+const IN_PLAY=new Set(['1B','2B','3B','HR','GO','FO','LO','PO','FC','E','SF','SH','DP','HBP','KS','KL','BB']);
+function blankStat(){return{PA:0,AB:0,R:0,H:0,'1B':0,'2B':0,'3B':0,HR:0,RBI:0,BB:0,HBP:0,K:0,SB:0,CS:0,SF:0,SH:0,PO:0,A:0,E:0}}
+function replay(g){
+ const S={half:0,outs:0,b:0,s:0,bases:[null,null,null],halfRuns:0,order:{away:0,home:0},line:{away:[],home:[]},H:{away:0,home:0},E:{away:0,home:0},
+  teams:{away:clone(g.away.roster),home:clone(g.home.roster)},pitcher:{away:null,home:null},pc:{},st:{},log:[],notice:'',over:false,capHit:false,players:{}};
+ const reg=()=>{for(const t of ['away','home'])for(const p of S.teams[t])S.players[p.id]={...p,team:t}};reg();
+ for(const ev of g.events){S.notice='';apply(S,g,ev);reg()}
+ S.inning=Math.floor(S.half/2)+1;S.bat=S.half%2?'home':'away';S.fld=S.half%2?'away':'home';
+ S.batter=curBatter(S);S.curPitcher={away:curPitcher(S,'away'),home:curPitcher(S,'home')};
+ S.R={away:sum(S.line.away),home:sum(S.line.home)};return S}
+const sum=a=>a.reduce((x,y)=>x+(y||0),0);
+const lineup=(S,t)=>S.teams[t].filter(p=>p.pos!=='BN');
+function curBatter(S){const t=S.half%2?'home':'away',L=lineup(S,t);if(L.length)return L[S.order[t]%L.length];const n=S.order[t]%9+1,id=t+'_gen'+n;S.players[id]=S.players[id]||{id,name:'Batter '+n,num:'',pos:'',team:t,gen:true};return S.players[id]}
+function curPitcher(S,t){const id=S.pitcher[t];if(id&&S.teams[t].some(p=>p.id===id))return id;const p=S.teams[t].find(p=>p.pos==='P');return p?p.id:null}
+const st=(S,id)=>id?(S.st[id]=S.st[id]||blankStat()):blankStat();
+const nm=(S,id)=>{const p=S.players[id];return p?(p.num?'#'+p.num+' ':'')+p.name:'?'};
+function lbl(S){return(S.half%2?'B':'T')+(Math.floor(S.half/2)+1)}
+function addPitch(S,n){const t=S.half%2?'away':'home',id=curPitcher(S,t);if(id)S.pc[id]=Math.max(0,(S.pc[id]||0)+n)}
+function addRun(S,g,id,rbiId){if(S.over)return;if(g.maxRunsOn&&S.halfRuns>=g.maxRuns)return;
+ const t=S.half%2?'home':'away',i=Math.floor(S.half/2);S.line[t][i]=(S.line[t][i]||0)+1;S.halfRuns++;st(S,id).R++;if(rbiId)st(S,rbiId).RBI++;
+ S.log.push(lbl(S)+': '+nm(S,id)+' scores'+(rbiId?' (RBI '+nm(S,rbiId)+')':''));
+ if(g.maxRunsOn&&S.halfRuns>=g.maxRuns)S.capHit=true;
+ // walk-off
+ const last=g.innings;if(S.half%2&&Math.floor(S.half/2)+1>=last&&sum(S.line.home)>sum(S.line.away)){S.over=true;S.overMsg='Walk-off! Game over.'}}
+function out(S,n){S.outs+=n}
+function endHalf(S,g,why){
+ const t=S.half%2?'home':'away',i=Math.floor(S.half/2);S.line[t][i]=S.line[t][i]||0;
+ S.log.push('— End '+lbl(S)+(why?' ('+why+')':'')+' —');S.notice=why==='run limit'?'⚠ '+g.maxRuns+'-run limit reached — half-inning over, switch sides':(why==='3 outs'?'3 outs — switch sides':'Half-inning ended');
+ S.half++;S.outs=0;S.b=0;S.s=0;S.bases=[null,null,null];S.halfRuns=0;S.capHit=false;
+ const inn=Math.floor(S.half/2)+1,A=sum(S.line.away),H=sum(S.line.home);
+ if(S.half%2===1&&inn>=g.innings&&H>A){S.over=true;S.overMsg='Game over — home team leads, bottom not needed.'}
+ if(S.half%2===0&&inn>g.innings&&H!==A){S.over=true;S.overMsg='Game over.'}
+ if(S.over)S.notice=S.overMsg}
+function finishPA(S){const t=S.half%2?'home':'away';S.order[t]++;S.b=0;S.s=0}
+function advAll(S,n,batter,bb){const runs=[];for(let i=2;i>=0;i--){const r=S.bases[i];if(!r)continue;S.bases[i]=null;const nb=i+n;if(nb>=3)runs.push(r);else S.bases[nb]=r}
+ if(batter){if(bb>=4)runs.push(batter);else S.bases[bb-1]=batter}return runs}
+function force(S,batter){const b=S.bases,runs=[];if(b[0]){if(b[1]){if(b[2])runs.push(b[2]);b[2]=b[1]}b[1]=b[0]}b[0]=batter;return runs}
+function result(S,g,r,ev){
+ const bat=curBatter(S);if(!bat){S.notice='No batters in lineup';return}const id=bat.id,x=st(S,id);const fldT=S.half%2?'away':'home';
+ x.PA++;let runs=[],rbi=true;const desc=lbl(S)+': '+nm(S,id)+' — '+RES[r];
+ const catcher=()=>{if(ev.credits&&ev.credits.length)return;const c=S.teams[fldT].find(p=>p.pos==='C');if(c)st(S,c.id).PO++};
+ if(ev.credits)for(const c of ev.credits){if(c.k==='E'&&r==='E')continue;st(S,c.pid)[c.k]++}
+ switch(r){
+ case '1B':case '2B':case '3B':case 'HR':{const n={'1B':1,'2B':2,'3B':3,HR:4}[r];x.AB++;x.H++;x[r]++;S.H[S.half%2?'home':'away']++;runs=advAll(S,n,id,n);break}
+ case 'BB':x.BB++;runs=force(S,id);break;
+ case 'HBP':x.HBP++;runs=force(S,id);break;
+ case 'KS':case 'KL':x.AB++;x.K++;out(S,1);catcher();break;
+ case 'GO':case 'FO':case 'LO':case 'PO':x.AB++;out(S,1);break;
+ case 'SF':x.SF++;out(S,1);if(S.outs<3&&S.bases[2]){runs=[S.bases[2]];S.bases[2]=null}break;
+ case 'SH':x.SH++;out(S,1);if(S.outs<3)runs=advAll(S,1,null);break;
+ case 'FC':{x.AB++;rbi=false;let k=-1;for(let i=0;i<3&&S.bases[i];i++)k=i;
+   if(k>=0){S.log.push('  lead runner '+nm(S,S.bases[k])+' out');S.bases[k]=null;out(S,1);if(S.outs<3)runs=force(S,id);else S.bases[0]=id}
+   else{S.bases[0]=id}break}
+ case 'E':{x.AB++;rbi=false;if(!ev.fielder&&ev.credits){const c=ev.credits.find(c=>c.k==='E');if(c)ev={...ev,fielder:c.pid}}if(ev.fielder){st(S,ev.fielder).E++}S.E[fldT]++;runs=force(S,id);break}
+ case 'DP':{x.AB++;rbi=false;out(S,1);let k=-1;for(let i=2;i>=0;i--)if(S.bases[i]){k=i;break}if(k>=0){S.bases[k]=null;out(S,1)}break}
+ }
+ S.log.push(desc+(ev.fielder&&r==='E'?' ('+nm(S,ev.fielder)+')':''));
+ finishPA(S);
+ if(S.outs<3)for(const rr of runs)addRun(S,g,rr,rbi?id:null);
+}
+function apply(S,g,ev){
+ if(S.over&&(S.ended||!['sub','pos','addp','pcadj','fld','rbi'].includes(ev.t))){return}
+ switch(ev.t){
+ case 'pitch':{addPitch(S,1);const k=ev.k;
+   if(k==='B'){S.b++;S.log.push(lbl(S)+': ball ('+S.b+'-'+S.s+')');if(S.b>=4)result(S,g,'BB',{})}
+   else if(k==='SS'||k==='SL'){S.s++;S.log.push(lbl(S)+': strike '+(k==='SS'?'swinging':'looking')+' ('+S.b+'-'+S.s+')');if(S.s>=3)result(S,g,k==='SS'?'KS':'KL',{})}
+   else if(k==='F'){if(S.s<2)S.s++;S.log.push(lbl(S)+': foul ('+S.b+'-'+S.s+')')}
+   break}
+ case 'res':addPitch(S,1);result(S,g,ev.r,ev);break;
+ case 'run':{const i=ev.base,r=S.bases[i];if(!r)break;const x=st(S,r);
+   if(ev.a==='adv'||ev.a==='SB'){S.bases[i]=null;if(ev.a==='SB')x.SB++;S.log.push(lbl(S)+': '+nm(S,r)+(ev.a==='SB'?' steals ':' advances ')+(i<2?['2nd','3rd'][i]:'home'));if(i>=2)addRun(S,g,r,null);else{S.bases[i+1]=r}}
+   else if(ev.a==='score'){S.bases[i]=null;addRun(S,g,r,ev.rbi||null)}
+   else if(ev.a==='out'||ev.a==='CS'){S.bases[i]=null;if(ev.a==='CS')x.CS++;out(S,1);S.log.push(lbl(S)+': '+nm(S,r)+(ev.a==='CS'?' caught stealing':' out on bases'))}
+   break}
+ case 'rbi':st(S,ev.pid).RBI=Math.max(0,st(S,ev.pid).RBI+ev.d);S.log.push('RBI '+(ev.d>0?'+':'')+ev.d+' '+nm(S,ev.pid));break;
+ case 'fld':{const x=st(S,ev.pid);x[ev.k]=Math.max(0,x[ev.k]+(ev.d||1));if(ev.k==='E'){const t=S.players[ev.pid]&&S.players[ev.pid].team;if(t)S.E[t]+=(ev.d||1)}S.log.push(ev.k+' '+nm(S,ev.pid));break}
+ case 'pitcher':S.pitcher[ev.team]=ev.pid;S.log.push('Pitching change ('+ev.team+'): '+nm(S,ev.pid));break;
+ case 'pcadj':{const id=ev.pid;S.pc[id]=Math.max(0,(S.pc[id]||0)+ev.d);break}
+ case 'sub':{const T=S.teams[ev.team],a=T.findIndex(p=>p.id===ev.out),b=T.findIndex(p=>p.id===ev.in);if(a<0||b<0)break;
+   const pa=T[a],pb=T[b];pb.pos=pa.pos;pa.pos='BN';T[a]=pb;T[b]=pa;S.log.push('Sub ('+ev.team+'): '+pb.name+' for '+pa.name);break}
+ case 'pos':{const p=S.teams[ev.team].find(p=>p.id===ev.pid);if(p){S.log.push('Position: '+p.name+' '+p.pos+'→'+ev.pos);p.pos=ev.pos}break}
+ case 'addp':S.teams[ev.team].push(clone(ev.p));S.log.push('Added '+ev.p.name+' ('+ev.team+')');break;
+ case 'endhalf':endHalf(S,g,'manual');return;
+ case 'endgame':{const t=S.half%2?'home':'away',i=Math.floor(S.half/2);S.line[t][i]=S.line[t][i]||0;
+   S.over=true;S.ended=true;S.endReason=ev.reason+(ev.note?': '+ev.note:'');S.endAt=(S.half%2?'Bottom ':'Top ')+(i+1)+', '+S.outs+' out';
+   S.overMsg='Game ended — '+S.endReason+' ('+S.endAt+')';S.notice=S.overMsg;S.log.push('— GAME ENDED: '+S.endReason+' ('+S.endAt+') —');return}
+ }
+ if(!S.over){if(S.outs>=3)endHalf(S,g,'3 outs');else if(S.capHit)endHalf(S,g,'run limit')}
+}
+/* --- stats math --- */
+function rates(x){const TB=x['1B']+2*x['2B']+3*x['3B']+4*x.HR;const avg=x.AB?x.H/x.AB:0,obpD=x.AB+x.BB+x.HBP+x.SF,obp=obpD?(x.H+x.BB+x.HBP)/obpD:0,slg=x.AB?TB/x.AB:0;
+ const ch=x.PO+x.A+x.E;return{AVG:avg,OBP:obp,SLG:slg,OPS:obp+slg,TB,FLD:ch?(x.PO+x.A)/ch:null}}
+const f3=v=>v==null?'—':(v>=1?v.toFixed(3):v.toFixed(3).replace(/^0/,''));
+function season(games){const out={};for(const g of games){const S=replay(g);for(const id in S.players){const p=S.players[id];if(p.gen)continue;const key=(g[p.team].name+'|'+p.name).toLowerCase();
+  const o=out[key]=out[key]||{team:g[p.team].name,name:p.name,num:p.num,G:0,...blankStat()};const x=S.st[id];if(!x)continue;o.G++;for(const k in x)o[k]+=x[k]}}return out}
+/* --- pitch count rolling window (day granularity) --- */
+function dayNum(s){const[y,m,d]=s.split('-').map(Number);return Math.round(Date.UTC(y,m-1,d)/864e5)}
+function fromDay(n){const d=new Date(n*864e5);return d.toISOString().slice(0,10)}
+const addDays=(s,n)=>fromDay(dayNum(s)+n);
+const WINDOW=7;
+function pitchEntries(games,manual){const E=[];for(const g of games){const S=replay(g);for(const id in S.pc){if(!S.pc[id])continue;const p=S.players[id];if(!p)continue;const team=g[p.team].name;
+  E.push({key:(team+'|'+p.name).toLowerCase(),name:p.name,team,date:g.date,count:S.pc[id],gameId:g.id})}}
+ for(const m of manual||[])E.push({key:(m.team+'|'+m.name).toLowerCase(),name:m.name,team:m.team,date:m.date,count:+m.count,manual:m.id});return E}
+// entry dated D counts on days D..D+6 and drops off on D+7
+function inWindow(date,today){const d=dayNum(date),t=dayNum(today);return d<=t&&d>t-WINDOW}
+function rolling(entries,today,weeklyMax){const by={};for(const e of entries){const o=by[e.key]=by[e.key]||{key:e.key,name:e.name,team:e.team,total:0,drops:[],entries:[]};o.entries.push(e);
+  if(inWindow(e.date,today)){o.total+=e.count;o.drops.push({date:addDays(e.date,WINDOW),count:e.count})}}
+ for(const k in by){const o=by[k];const m={};for(const d of o.drops)m[d.date]=(m[d.date]||0)+d.count;o.drops=Object.keys(m).sort().map(d=>({date:d,count:m[d]}));
+  o.eligible=null;if(weeklyMax&&o.total>=weeklyMax){let t=o.total;for(const d of o.drops){t-=d.count;if(t<weeklyMax){o.eligible=d.date;break}}}
+  o.remaining=weeklyMax?Math.max(0,weeklyMax-o.total):null}return by}
+/* fielding auto-credit from a tapped sequence of fielder ids, e.g. [SS,1B] for 6-3 */
+const SEQ_RES=new Set(['GO','FO','LO','PO','FC','SF','SH','DP','E','KS','KL']);
+function creditsFor(r,seq){seq=(seq||[]).filter(Boolean);if(!seq.length)return[];const out=[];
+ if(r==='E'){seq.slice(0,-1).forEach(p=>out.push({pid:p,k:'A'}));out.push({pid:seq[seq.length-1],k:'E'});return out}
+ if(r==='DP'){if(seq.length===1){out.push({pid:seq[0],k:'PO'},{pid:seq[0],k:'PO'});return out}
+  if(seq.length===2){out.push({pid:seq[0],k:'PO'},{pid:seq[0],k:'A'},{pid:seq[1],k:'PO'});return out}
+  out.push({pid:seq[0],k:'A'});seq.slice(1,-1).forEach(p=>out.push({pid:p,k:'PO'},{pid:p,k:'A'}));out.push({pid:seq[seq.length-1],k:'PO'});return out}
+ seq.slice(0,-1).forEach(p=>out.push({pid:p,k:'A'}));out.push({pid:seq[seq.length-1],k:'PO'});return out}
+function level(n,max,warnPct){if(!max)return 0;const p=n/max*100;return p>=100?3:p>=90?2:p>=(warnPct||75)?1:0}
+return{creditsFor,SEQ_RES,POS,RES,IN_PLAY,uid,clone,todayStr,newGame,player,replay,rates,f3,season,dayNum,addDays,inWindow,rolling,pitchEntries,level,blankStat,lineup}
+})();
+if(typeof module!=='undefined')module.exports=Engine;
+</script>
+
+<script>
+/* ===== UI ===== */
+const E=Engine,KEY='youthScorebook_v1';
+let D=load(),tab='game',sel={fld:'',err:''};
+function load(){try{const d=JSON.parse(localStorage.getItem(KEY));if(d&&d.games)return d}catch(e){}return{games:[],cur:null,settings:{weeklyMax:85,gameMax:'',warnPct:75},pitchLog:[]}}
+function save(){localStorage.setItem(KEY,JSON.stringify(D))}
+const G=()=>D.games.find(g=>g.id===D.cur);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const $=s=>document.querySelector(s);
+function push(ev){const g=G();if(!g)return;g.events.push(ev);save();render()}
+$('#undo').onclick=()=>{const g=G();if(g&&g.events.length){g.events.pop();save();render()}};
+const TABS=[['game','Game'],['lineups','Lineups'],['stats','Stats'],['pitch','Pitchers'],['data','Games & Data']];
+function nav(){$('#nav').innerHTML=TABS.map(([k,v])=>`<button class="${k===tab?'on':''}" onclick="tab='${k}';render()">${v}</button>`).join('')}
+function render(){nav();const g=G();$('#undo').style.display=(tab==='game'&&g&&g.events.length)?'':'none';
+ $('#app').innerHTML=(!g&&tab!=='data'&&tab!=='pitch'&&tab!=='stats')?newGameForm():({game:vGame,lineups:vLineups,stats:vStats,pitch:vPitch,data:vData}[tab])(g)}
+let pend=null,endSheet=false;
+function endBtn(){return`<button class="b r" style="width:100%;margin-top:6px;min-height:40px" onclick="endSheet={reason:''};render()">■ End Game</button>${endSheet?endSheetHtml():''}`}
+function endSheetHtml(){const R=['Weather','Time limit','Mercy/run rule','Other'];return`<div class="sheet"><div class="row"><b style="flex:1">End game now?</b><button class="b sm" onclick="endSheet=false;render()">Cancel</button></div>
+ <div class="mut">Stats and pitch counts so far are kept. Undo can reopen the game.</div>
+ <div class="grid" style="grid-template-columns:repeat(2,1fr);margin:8px 0">${R.map(r=>`<button class="b ${endSheet.reason===r?'p':''}" onclick="endSheet.reason='${r}';render()">${r}</button>`).join('')}</div>
+ ${endSheet.reason==='Other'?`<input id="endNote" placeholder="Reason" style="width:100%;margin-bottom:8px" value="${esc(endSheet.note||'')}" oninput="endSheet.note=this.value">`:''}
+ <button class="b r" style="width:100%" onclick="doEnd()">Confirm — End Game</button></div>`}
+function doEnd(){if(!endSheet.reason){alert('Pick a reason');return}const ev={t:'endgame',reason:endSheet.reason};if(endSheet.reason==='Other')ev.note=(endSheet.note||'').trim();endSheet=false;push(ev)}
+function gameRows(g,S,t){return Object.keys(S.players).filter(id=>S.players[id].team===t&&(S.st[id]||!S.players[id].gen)).map(id=>({name:S.players[id].name,team:g[t].name,G:1,...E.blankStat(),...(S.st[id]||{})}))}
+function finalData(g,S){const played=S.half+(S.ended?1:0),inn=Math.max(g.innings,Math.ceil(played/2));
+ const cell=(t,i)=>{const hi=i*2+(t==='home'?1:0);return hi<played||S.line[t][i]!=null?(S.line[t][i]||0):'x'};
+ const win=S.R.away===S.R.home?'Tie':(S.R.away>S.R.home?g.away.name:g.home.name)+' win';
+ const rm=rollMap();const pcs=Object.keys(S.pc).filter(id=>S.pc[id]).map(id=>{const p=S.players[id],r=rm[(g[p.team].name+'|'+p.name).toLowerCase()];return{name:p.name,team:g[p.team].name,n:S.pc[id],wk:r?r.total:S.pc[id]}});
+ return{inn,cell,win,pcs,reason:S.ended?S.endReason+' ('+S.endAt+')':'Regulation'}}
+function summaryText(g,S){const F=finalData(g,S);let s=`FINAL${S.ended?' (stopped)':''} — ${g.date}\n${g.away.name} ${S.R.away}, ${g.home.name} ${S.R.home} — ${F.win}\nReason: ${F.reason}\n\n`;
+ for(const t of['away','home'])s+=`${g[t].name.padEnd(12).slice(0,12)} ${Array.from({length:F.inn},(_,i)=>F.cell(t,i)).join(' ')} | R${S.R[t]} H${S.H[t]} E${S.E[t]}\n`;
+ const ord=g.myTeam==='home'?['home','away']:['away','home'];
+ for(const t of ord){s+=`\n${g[t].name} hitting (AB-H-R-RBI-BB-K):\n`;for(const r of gameRows(g,S,t))if(r.PA)s+=`  ${r.name}: ${r.AB}-${r.H}-${r.R}-${r.RBI}-${r.BB}-${r.K}${r['2B']?' 2B'+r['2B']:''}${r['3B']?' 3B'+r['3B']:''}${r.HR?' HR'+r.HR:''}${r.SB?' SB'+r.SB:''}\n`}
+ s+='\nPitch counts (game / 7-day):\n';for(const p of F.pcs)s+=`  ${p.name} (${p.team}): ${p.n} / ${p.wk}\n`;return s}
+function share(){const g=G(),S=E.replay(g),t=summaryText(g,S);if(navigator.share)navigator.share({title:'Game summary',text:t}).catch(()=>{});else if(navigator.clipboard)navigator.clipboard.writeText(t).then(()=>alert('Summary copied'),()=>prompt('Copy:',t));else prompt('Copy:',t)}
+function gcsv(){const g=G(),S=E.replay(g),H='team,name,PA,AB,R,H,1B,2B,3B,HR,RBI,BB,HBP,K,SB,CS,SF,SH,PO,A,E,pitches'.split(',');const rows=[];
+ for(const t of['away','home'])for(const id in S.players){const p=S.players[id];if(p.team!==t||(!S.st[id]&&!S.pc[id]))continue;const x={...E.blankStat(),...(S.st[id]||{}),team:g[t].name,name:p.name,pitches:S.pc[id]||0};rows.push(H.map(k=>cq(x[k])).join(','))}
+ dl('game_'+g.date+'.csv',[H.join(',')].concat(rows).join('\n'),'text/csv')}
+function vFinal(g,S){const F=finalData(g,S),ord=g.myTeam==='home'?['home','away']:['away','home'];const last=g.events[g.events.length-1];
+ let ls=`<table><tr><th class="l">Team</th>${Array.from({length:F.inn},(_,i)=>`<th>${i+1}</th>`).join('')}<th>R</th><th>H</th><th>E</th></tr>`;
+ for(const t of['away','home'])ls+=`<tr><td class="l"><b>${esc(g[t].name)}</b></td>${Array.from({length:F.inn},(_,i)=>`<td>${F.cell(t,i)}</td>`).join('')}<td><b>${S.R[t]}</b></td><td>${S.H[t]}</td><td>${S.E[t]}</td></tr>`;ls+='</table>';
+ return`<div class="badge" style="background:var(--bad)">FINAL${S.ended?' — STOPPED':''}</div>
+ <div class="card"><div class="cnt">${esc(g.away.name)} ${S.R.away} – ${esc(g.home.name)} ${S.R.home}</div><div><b>${esc(F.win)}</b> · ${esc(g.date)}</div><div class="mut">Reason: ${esc(F.reason)}</div>
+  <div class="scroll" style="margin-top:6px">${ls}</div>
+  <div class="row" style="margin-top:8px"><button class="b p" onclick="share()">Copy/Share summary</button><button class="b" onclick="gcsv()">Game CSV</button><button class="b" onclick="csv()">Season CSV</button>
+  ${last&&last.t==='endgame'?`<button class="b" onclick="G().events.pop();save();render()">Reopen game</button>`:''}</div></div>
+ ${ord.map(t=>`<div class="card"><h3>${esc(g[t].name)}${t===g.myTeam?' (my team)':''}</h3>${statTables(gameRows(g,S,t))}</div>`).join('')}
+ <div class="card"><h3>Pitch counts</h3><table><tr><th class="l">Pitcher</th><th>Game</th><th>7-day</th></tr>${F.pcs.map(p=>`<tr><td class="l">${esc(p.name)} <span class="mut">${esc(p.team)}</span></td><td>${p.n}</td><td><span class="pill s${E.level(p.wk,+D.settings.weeklyMax,D.settings.warnPct)}">${p.wk}</span></td></tr>`).join('')||'<tr><td colspan="3" class="mut">None</td></tr>'}</table></div>
+ <div class="card"><h3>Play-by-play</h3><div class="log">${S.log.slice().reverse().map(l=>`<div>${esc(l)}</div>`).join('')}</div></div>`}
+const NUM={P:1,C:2,'1B':3,'2B':4,'3B':5,SS:6,LF:7,CF:8,RF:9};
+function myToggle(g){return`${endBtn()}<div class="row mut">My team: ${['away','home'].map(t=>`<button class="b sm ${g.myTeam===t?'p':''}" onclick="G().myTeam='${t}';save();render()">${esc(g[t].name)}</button>`).join('')}<button class="b sm ${!g.myTeam?'p':''}" onclick="G().myTeam='';save();render()">Full view</button></div>`}
+function mini(g,S){return`<div class="card sb" style="padding:6px 10px">${diamond(S.bases)}<div style="flex:1"><div class="cnt">${esc(g.away.name)} ${S.R.away} – ${esc(g.home.name)} ${S.R.home}</div>
+ <div class="cnt" style="font-size:19px">${S.half%2?'▼':'▲'}${S.inning} · <span style="color:var(--acc)">${S.b}-${S.s}</span> · ${S.outs} out${g.maxRunsOn?` · <span class="mut">${S.halfRuns}/${g.maxRuns} R</span>`:''}</div></div></div>
+ ${S.notice?`<div class="notice">${esc(S.notice)}</div>`:''}`}
+const PB=`<div class="grid" style="grid-template-columns:repeat(4,1fr)"><button class="b big" onclick="push({t:'pitch',k:'B'})">Ball</button><button class="b big" onclick="push({t:'pitch',k:'SS'})">Strike<br><small>swing</small></button><button class="b big" onclick="push({t:'pitch',k:'SL'})">Strike<br><small>look</small></button><button class="b big" onclick="push({t:'pitch',k:'F'})">Foul</button></div>`;
+const RB=(k,l,c)=>`<button class="b ${c||''}" onclick="res('${k}')">${l}</button>`;
+function runnersCard(S){const rs=S.bases.map((r,i)=>r?`<div class="row"><b style="width:40px">${['1st','2nd','3rd'][i]}</b><span style="flex:1">${esc(S.players[r]?.name)}</span>${['adv','score','out','SB','CS'].map(a=>`<button class="b sm" onclick="push({t:'run',base:${i},a:'${a}'})">${{adv:'Adv',score:'Score',out:'Out',SB:'SB',CS:'CS'}[a]}</button>`).join('')}</div>`:'').join('');return rs?`<div class="card"><h3>Runners</h3>${rs}</div>`:''}
+function todayLine(x){x=x||E.blankStat();const r=E.rates(x);return`${x.H}-for-${x.AB}${x['2B']?`, ${x['2B']} 2B`:''}${x['3B']?`, ${x['3B']} 3B`:''}${x.HR?`, ${x.HR} HR`:''}${x.RBI?`, ${x.RBI} RBI`:''}${x.R?`, ${x.R} R`:''}${x.BB?`, ${x.BB} BB`:''}${x.HBP?`, ${x.HBP} HBP`:''}${x.K?`, ${x.K} K`:''}${x.SB?`, ${x.SB} SB`:''} <span class="mut">(PA ${x.PA}, AVG ${E.f3(r.AVG)})</span>`}
+function lastLog(S){return`<div class="card"><div class="log" style="max-height:120px">${S.log.slice(-6).reverse().map(l=>`<div>${esc(l)}</div>`).join('')||'<span class="mut">No plays yet</span>'}</div></div>`}
+function vBat(g,S){const b=S.batter,L=E.lineup(S,S.bat),nx=L.length?L[(S.order[S.bat]+1)%L.length]:null;
+ return`${myToggle(g)}<div class="badge">🏏 BATTING</div>${mini(g,S)}
+ <div class="card"><div class="mut">Now batting</div><div class="cnt">${b?esc((b.num?'#'+b.num+' ':'')+b.name):'(set lineup)'} <span class="mut">${b?esc(b.pos):''}</span></div>
+  <div>Today: ${todayLine(b&&S.st[b.id])}</div><div class="mut">On deck: ${nx?esc(nx.name):'—'}</div></div>
+ <div class="card">${PB}</div>
+ <div class="card"><h3>Result</h3><div class="grid">${RB('1B','1B','p')}${RB('2B','2B','p')}${RB('3B','3B','p')}${RB('HR','HR','p')}${RB('BB','BB')}${RB('HBP','HBP')}${RB('KS','K swing')}${RB('KL','K look')}
+ ${RB('GO','Ground out')}${RB('FO','Fly out')}${RB('LO','Line out')}${RB('PO','Pop out')}${RB('FC','FC')}${RB('SF','Sac fly')}${RB('SH','Sac bunt')}${RB('DP','DP')}</div>
+ <div class="row" style="margin-top:6px"><button class="b" style="flex:1" onclick="push({t:'res',r:'E'})">Reached on error</button><button class="b sm" onclick="rbi(1)">RBI +1</button><button class="b sm" onclick="rbi(-1)">RBI −1</button></div></div>
+ ${runnersCard(S)}${lastLog(S)}`}
+function vField(g,S){const me=g.myTeam,pid=S.curPitcher[me],b=S.batter;const ps=S.teams[me];
+ const s=D.settings,rm=rollMap(),p=pid&&S.players[pid],r=p&&rm[(g[me].name+'|'+p.name).toLowerCase()];const n=pid?(S.pc[pid]||0):0;
+ const lv=Math.max(E.level(n,+s.gameMax||0,s.warnPct),r?E.level(r.total,+s.weeklyMax,s.warnPct):0);
+ return`${myToggle(g)}<div class="badge f">🧤 FIELDING</div>${mini(g,S)}
+ <div class="card"><div class="row"><select style="flex:1" onchange="push({t:'pitcher',team:'${me}',pid:this.value})"><option value="">Pick pitcher…</option>${ps.map(x=>`<option value="${x.id}" ${x.id===pid?'selected':''}>${esc(x.name)}${x.pos==='P'?' (P)':''}</option>`).join('')}</select></div>
+  ${pid?`<div class="row"><span class="pill s${lv}" style="font-size:22px;padding:6px 16px">${n}</span><span>pitches today${s.gameMax?' / '+s.gameMax:''}<br><span class="mut">7-day: ${r?r.total:n}${s.weeklyMax?' / '+s.weeklyMax:''}${r&&r.drops[0]?` · −${r.drops[0].count} on ${r.drops[0].date}`:''}</span></span>
+   <span style="margin-left:auto"><button class="b sm" onclick="push({t:'pcadj',pid:'${pid}',d:-1})">−</button> <button class="b sm" onclick="push({t:'pcadj',pid:'${pid}',d:1})">+</button></span></div>${lv===3?'<div class="notice over">Pitch limit reached!</div>':''}`:''}</div>
+ <div class="card"><div class="mut">Batter: ${b?esc((b.num?'#'+b.num+' ':'')+b.name):'—'}</div>${PB}</div>
+ <div class="card"><h3>Result <span class="mut">(outs ask who made the play)</span></h3><div class="grid">${RB('GO','Ground out','p')}${RB('FO','Fly out','p')}${RB('LO','Line out','p')}${RB('PO','Pop out','p')}
+ ${RB('1B','1B')}${RB('2B','2B')}${RB('3B','3B')}${RB('HR','HR')}${RB('BB','BB')}${RB('HBP','HBP')}${RB('KS','K swing')}${RB('KL','K look')}${RB('FC','FC')}${RB('SF','Sac fly')}${RB('SH','Sac bunt')}${RB('DP','DP')}</div>
+ <button class="b" style="width:100%;margin-top:6px" onclick="res('E')">Error (pick fielder)</button></div>
+ ${runnersCard(S)}${lastLog(S)}${pend?sheet(g,S):''}`}
+function sheet(g,S){const me=g.myTeam,f=S.teams[me].filter(p=>NUM[p.pos]).sort((a,b)=>NUM[a.pos]-NUM[b.pos]);
+ const seqTxt=pend.seq.map(id=>NUM[S.players[id].pos]).join('-')||'tap fielders in order';
+ const hint={E:'Tap who made the error (assists first if any)',DP:'e.g. 6-4-3',FO:'Tap who caught it',LO:'Tap who caught it',PO:'Tap who caught it',SF:'Tap who caught it'}[pend.r]||'e.g. 6-3 = SS then 1B';
+ return`<div class="sheet"><div class="row"><b style="flex:1">${E.RES[pend.r]}: ${seqTxt}</b><button class="b sm" onclick="pend=null;render()">Cancel</button></div><div class="mut">${hint}</div>
+ <div class="grid g3" style="margin:8px 0">${f.map(p=>`<button class="b" onclick="pend.seq.push('${p.id}');render()"><b>${NUM[p.pos]}</b> ${p.pos}<br><small>${esc(p.name)}</small></button>`).join('')}</div>
+ <div class="grid g3"><button class="b" onclick="pend.seq.pop();render()">⌫ Back</button><button class="b" onclick="commitPend(true)">No credit</button><button class="b p" onclick="commitPend()">✓ Record</button></div></div>`}
+function commitPend(skip){const g=G(),S=E.replay(g),seq=skip?[]:pend.seq,r=pend.r;if(r==='E'&&!seq.length&&!skip){alert('Tap the fielder charged with the error');return}
+ const ev={t:'res',r};if(seq.length)ev.credits=E.creditsFor(r,seq);if(r==='E'&&seq.length)ev.fielder=seq[seq.length-1];pend=null;push(ev)}
+function newGameForm(){return`<div class="card"><h3>New game</h3>
+ <div class="row"><input id="ng_a" placeholder="Away team" value="Away"><input id="ng_h" placeholder="Home team" value="Home"></div>
+ <div class="row">Date <input id="ng_d" type="date" value="${E.todayStr()}"> Innings <input id="ng_i" type="number" min="1" max="12" value="6" style="width:70px"></div>
+ <div class="row"><label><input id="ng_mr" type="checkbox" checked> Max runs per inning</label><input id="ng_m" type="number" min="1" value="5" style="width:70px"></div>
+ <div class="row">My team <select id="ng_my"><option value="">— (full view)</option><option value="away">Away</option><option value="home">Home</option></select></div>
+ <p class="mut">Tip: copy rosters from your last game with the same team names automatically.</p>
+ <button class="b p" onclick="createGame()">Start game</button></div>`}
+function createGame(){const a=$('#ng_a').value||'Away',h=$('#ng_h').value||'Home';
+ const prev=t=>{for(let i=D.games.length-1;i>=0;i--)for(const s of['away','home'])if(D.games[i][s].name.toLowerCase()===t.toLowerCase())return D.games[i][s].roster.map(p=>({...p,id:E.uid()}));return[]};
+ const g=E.newGame({awayName:a,homeName:h,date:$('#ng_d').value,innings:+$('#ng_i').value||6,maxRunsOn:$('#ng_mr').checked,maxRuns:+$('#ng_m').value||5,myTeam:$('#ng_my').value,away:prev(a),home:prev(h)});
+ D.games.push(g);D.cur=g.id;save();tab=g.away.roster.length&&g.home.roster.length?'game':'lineups';render()}
+function pcPill(n,id,S){const s=D.settings,g=G();let lv=E.level(n,+s.gameMax||0,s.warnPct);
+ const p=S.players[id];if(p){const r=rollMap()[(g[p.team].name+'|'+p.name).toLowerCase()];if(r)lv=Math.max(lv,E.level(r.total,+s.weeklyMax,s.warnPct));
+  return`<span class="pill s${lv}">${n} P${s.gameMax?' / '+s.gameMax:''}</span> <span class="mut">7-day: ${r?r.total:n}${s.weeklyMax?' / '+s.weeklyMax:''}</span>`}return''}
+function rollMap(){return E.rolling(E.pitchEntries(D.games,D.pitchLog),E.todayStr(),+D.settings.weeklyMax)}
+function diamond(b){const c=(x,y,on)=>`<rect class="base ${on?'on':''}" x="${x-9}" y="${y-9}" width="18" height="18" transform="rotate(45 ${x} ${y})"/>`;
+ return`<svg width="90" height="80" viewBox="0 0 90 80">${c(45,12,b[1])}${c(75,42,b[0])}${c(15,42,b[2])}<path d="M37 72h16l-8 6z" fill="var(--mut)"/></svg>`}
+function vGame(g){const S0=E.replay(g);if(S0.over)return vFinal(g,S0);if(g.myTeam&&!S0.over)return S0.bat===g.myTeam?vBat(g,S0):vField(g,S0);return vFull(g)}
+function vFull(g){const S=E.replay(g),inn=Math.max(g.innings,S.inning);
+ let ls=`<table><tr><th class="l">Team</th>${Array.from({length:inn},(_,i)=>`<th>${i+1}</th>`).join('')}<th>R</th><th>H</th><th>E</th></tr>`;
+ for(const t of['away','home'])ls+=`<tr><td class="l"><b>${esc(g[t].name)}</b></td>${Array.from({length:inn},(_,i)=>`<td>${S.line[t][i]==null?'':S.line[t][i]}</td>`).join('')}<td><b>${S.R[t]}</b></td><td>${S.H[t]}</td><td>${S.E[t]}</td></tr>`;
+ ls+='</table>';const bt=S.batter,pid=S.curPitcher[S.fld];
+ const fl=S.teams[S.fld].filter(p=>p.pos!=='BN');
+ const opt=(arr,v)=>'<option value="">—</option>'+arr.map(p=>`<option value="${p.id}" ${p.id===v?'selected':''}>${esc((p.pos!=='BN'?p.pos+' ':'')+(p.num?'#'+p.num+' ':'')+p.name)}</option>`).join('');
+ const R=(k,l,c)=>`<button class="b ${c||''}" onclick="res('${k}')">${l}</button>`;
+ const runners=S.bases.map((r,i)=>r?`<div class="row"><b style="width:46px">${['1st','2nd','3rd'][i]}</b><span style="flex:1">${esc(S.players[r]?.name)}</span>
+  ${['adv','score','out','SB','CS'].map(a=>`<button class="b sm" onclick="push({t:'run',base:${i},a:'${a}'})">${{adv:'Adv',score:'Score',out:'Out',SB:'SB',CS:'CS'}[a]}</button>`).join('')}</div>`:'').join('')||'<span class="mut">Bases empty</span>';
+ return`${myToggle(g)}<div class="card scroll">${ls}</div>
+ ${S.notice?`<div class="notice ${S.over?'over':''}">${esc(S.notice)}</div>`:''}${S.over&&!S.notice?`<div class="notice over">${esc(S.overMsg)}</div>`:''}
+ <div class="card sb">${diamond(S.bases)}<div><div class="cnt">${S.half%2?'▼':'▲'} ${S.inning} &nbsp; ${S.b}-${S.s} &nbsp; ${S.outs} out</div>
+  <div>At bat: <b>${bt?esc((bt.num?'#'+bt.num+' ':'')+bt.name):'(set lineup)'}</b> <span class="mut">${esc(g[S.bat].name)}</span></div>
+  ${g.maxRunsOn?`<div class="mut">Runs this half: ${S.halfRuns}/${g.maxRuns}</div>`:''}</div></div>
+ <div class="card"><div class="row">Pitching (${esc(g[S.fld].name)}): <select onchange="push({t:'pitcher',team:'${S.fld}',pid:this.value})">${opt(S.teams[S.fld],pid)}</select>
+  ${pid?pcPill(S.pc[pid]||0,pid,S)+` <button class="b sm" onclick="push({t:'pcadj',pid:'${pid}',d:-1})">−</button><button class="b sm" onclick="push({t:'pcadj',pid:'${pid}',d:1})">+</button>`:'<span class="mut">pick a pitcher</span>'}</div>
+  <div class="grid">
+  <button class="b" onclick="push({t:'pitch',k:'B'})">Ball</button><button class="b" onclick="push({t:'pitch',k:'SS'})">Strike (sw)</button>
+  <button class="b" onclick="push({t:'pitch',k:'SL'})">Strike (look)</button><button class="b" onclick="push({t:'pitch',k:'F'})">Foul</button></div></div>
+ <div class="card"><h3>Result of at-bat</h3><div class="grid">${R('1B','1B','p')}${R('2B','2B','p')}${R('3B','3B','p')}${R('HR','HR','p')}${R('BB','BB')}${R('HBP','HBP')}${R('KS','K swing')}${R('KL','K look')}
+  ${R('GO','Groundout')}${R('FO','Flyout')}${R('LO','Lineout')}${R('PO','Popout')}${R('FC','FC')}${R('SF','Sac fly')}${R('SH','Sac bunt')}${R('DP','Double play')}</div>
+  <div class="row" style="margin-top:6px">Error by <select id="errF" onchange="sel.err=this.value">${opt(fl,sel.err)}</select><button class="b" onclick="res('E')">Reached on error</button></div></div>
+ <div class="card"><h3>Runners</h3>${runners}</div>
+ <div class="card"><h3>Fielding credit & RBI</h3><div class="row"><select onchange="sel.fld=this.value">${opt(fl,sel.fld)}</select>
+  ${['PO','A','E'].map(k=>`<button class="b sm" onclick="sel.fld&&push({t:'fld',pid:sel.fld,k:'${k}',d:1})">+${k}</button>`).join('')}</div>
+  <div class="row">RBI to last batter: <button class="b sm" onclick="rbi(1)">+1</button><button class="b sm" onclick="rbi(-1)">−1</button>
+  <button class="b sm" style="margin-left:auto" onclick="confirm('End this half-inning now?')&&push({t:'endhalf'})">End half manually</button></div>
+  <p class="mut">K's auto-credit a putout to the catcher. Add other PO/A here (e.g. groundout 6-3: SS +A, 1B +PO).</p></div>
+ <div class="card"><h3>Play-by-play</h3><div class="log">${S.log.slice().reverse().map(l=>`<div>${esc(l)}</div>`).join('')||'<span class="mut">No plays yet</span>'}</div></div>`}
+function res(r){const g=G(),S=E.replay(g);
+ if(g.myTeam&&S.fld===g.myTeam&&E.SEQ_RES.has(r)&&!((r==='KS'||r==='KL'))){pend={r,seq:[]};render();return}
+ const ev={t:'res',r};if(r==='E'){if(!sel.err){alert('Choose the fielder charged with the error first');return}ev.fielder=sel.err}push(ev)}
+function rbi(d){const g=G(),S=E.replay(g);const t=S.bat;const L=E.lineup(S,t);if(!L.length)return;const prev=L[(S.order[t]-1+L.length)%L.length];push({t:'rbi',pid:prev.id,d})}
+function vLineups(g){const S=E.replay(g),live=g.events.length>0;
+ const team=t=>{const ps=S.teams[t];const bench=ps.filter(p=>p.pos==='BN');
+  return`<div class="card"><h3><input value="${esc(g[t].name)}" onchange="G()['${t}'].name=this.value;save()"> <span class="mut">${t}</span></h3>
+  <table><tr><th>#</th><th class="l">Name</th><th>Pos</th><th></th></tr>${ps.map((p,i)=>`<tr><td><input style="width:50px" value="${esc(p.num)}" onchange="editP('${t}','${p.id}','num',this.value)"></td>
+  <td class="l"><input value="${esc(p.name)}" onchange="editP('${t}','${p.id}','name',this.value)"></td>
+  <td><select onchange="setPos('${t}','${p.id}',this.value)">${E.POS.map(x=>`<option ${x===p.pos?'selected':''}>${x}</option>`).join('')}</select></td>
+  <td>${live?(p.pos!=='BN'&&bench.length?`<select onchange="this.value&&push({t:'sub',team:'${t}',out:'${p.id}',in:this.value})"><option value="">Sub…</option>${bench.map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('')}</select>`:''):
+   `<button class="b sm" onclick="mv('${t}',${i},-1)">↑</button><button class="b sm" onclick="mv('${t}',${i},1)">↓</button><button class="b sm" onclick="rm('${t}','${p.id}')">✕</button>`}</td></tr>`).join('')}</table>
+  <div class="row"><input id="np_${t}" placeholder="Player name"><input id="nn_${t}" placeholder="#" style="width:56px"><select id="nq_${t}">${E.POS.map(x=>`<option ${x==='BN'?'selected':''}>${x}</option>`).join('')}</select><button class="b sm p" onclick="addP('${t}')">Add</button></div>
+  <p class="mut">Batting order = top-to-bottom players not on BN (bench). ${live?'Game in progress: subs/position changes are logged and undoable.':''}</p></div>`};
+ return`<div class="card"><div class="row">Innings <input type="number" style="width:70px" value="${g.innings}" onchange="G().innings=+this.value||6;save()">
+  <label><input type="checkbox" ${g.maxRunsOn?'checked':''} onchange="G().maxRunsOn=this.checked;save()"> Max runs/inning</label>
+  <input type="number" style="width:70px" value="${g.maxRuns}" onchange="G().maxRuns=+this.value||5;save()"> Date <input type="date" value="${g.date}" onchange="G().date=this.value;save()"></div></div>${team('away')}${team('home')}`}
+function findP(t,id){const g=G();let p=g[t].roster.find(p=>p.id===id);if(!p){const e=g.events.find(e=>e.t==='addp'&&e.p.id===id);p=e&&e.p}return p}
+function editP(t,id,k,v){const p=findP(t,id);if(p){p[k]=v;save()}}
+function setPos(t,id,v){const g=G();if(g.events.length)push({t:'pos',team:t,pid:id,pos:v});else{findP(t,id).pos=v;save();render()}}
+function addP(t){const n=$('#np_'+t).value.trim();if(!n)return;const p=E.player(n,$('#nn_'+t).value,$('#nq_'+t).value);const g=G();if(g.events.length)push({t:'addp',team:t,p});else{g[t].roster.push(p);save();render()}}
+function mv(t,i,d){const r=G()[t].roster,j=i+d;if(j<0||j>=r.length)return;[r[i],r[j]]=[r[j],r[i]];save();render()}
+function rm(t,id){const g=G();g[t].roster=g[t].roster.filter(p=>p.id!==id);save();render()}
+function statTables(rows){const R=rows.map(r=>({...r,...E.rates(r)}));
+ return`<h3>Hitting</h3><div class="scroll"><table><tr><th class="l">Player</th>${'G PA AB R H 1B 2B 3B HR RBI BB HBP K SB AVG OBP SLG OPS'.split(' ').map(h=>`<th>${h}</th>`).join('')}</tr>
+ ${R.map(r=>`<tr><td class="l">${esc(r.name)} <span class="mut">${esc(r.team)}</span></td>${['G','PA','AB','R','H','1B','2B','3B','HR','RBI','BB','HBP','K','SB'].map(k=>`<td>${r[k]??''}</td>`).join('')}${['AVG','OBP','SLG','OPS'].map(k=>`<td>${E.f3(r[k])}</td>`).join('')}</tr>`).join('')}</table></div>
+ <h3>Fielding</h3><div class="scroll"><table><tr><th class="l">Player</th><th>PO</th><th>A</th><th>E</th><th>FLD%</th></tr>${R.map(r=>`<tr><td class="l">${esc(r.name)} <span class="mut">${esc(r.team)}</span></td><td>${r.PO}</td><td>${r.A}</td><td>${r.E}</td><td>${E.f3(r.FLD)}</td></tr>`).join('')}</table></div>`}
+function vStats(g){let h='';if(g){const S=E.replay(g);const rows=Object.keys(S.players).map(id=>({name:S.players[id].name,team:g[S.players[id].team].name,G:1,...E.blankStat(),...(S.st[id]||{})}));h+=`<div class="card"><h3>This game</h3>${statTables(rows)}</div>`}
+ const se=Object.values(E.season(D.games));return h+`<div class="card"><h3>Season totals (${D.games.length} games)</h3>${statTables(se)}</div>`}
+function vPitch(){const s=D.settings,m=rollMap(),today=E.todayStr();const list=Object.values(m).sort((a,b)=>b.total-a.total);
+ return`<div class="card"><h3>Pitch limits</h3><div class="row">Weekly max (rolling 7 days) <input type="number" style="width:80px" value="${s.weeklyMax}" onchange="D.settings.weeklyMax=+this.value||'';save();render()">
+  Per-game max <input type="number" style="width:80px" placeholder="none" value="${s.gameMax}" onchange="D.settings.gameMax=+this.value||'';save();render()">
+  Warn at <input type="number" style="width:60px" value="${s.warnPct}" onchange="D.settings.warnPct=+this.value||75;save();render()">%</div>
+  <p class="mut">Colors: <span class="pill s0">OK</span> <span class="pill s1">≥${s.warnPct}%</span> <span class="pill s2">≥90%</span> <span class="pill s3">at/over limit</span>. Pitches from a game dated D count through D+6 and drop off on D+7. Today: ${today}.</p></div>
+ <div class="card"><h3>Pitcher dashboard</h3><div class="scroll"><table><tr><th class="l">Pitcher</th><th>7-day</th><th>Left</th><th class="l">Rolls off</th><th>Eligible</th></tr>
+ ${list.map(o=>`<tr><td class="l">${esc(o.name)} <span class="mut">${esc(o.team)}</span></td><td><span class="pill s${E.level(o.total,+s.weeklyMax,s.warnPct)}">${o.total}</span></td><td>${o.remaining??'—'}</td>
+  <td class="l">${o.drops.map(d=>`−${d.count} on ${d.date}`).join('<br>')||'<span class="mut">nothing in window</span>'}</td><td>${o.eligible?esc(o.eligible):(s.weeklyMax&&o.total>=s.weeklyMax?'?':'Now')}</td></tr>`).join('')||'<tr><td colspan="5" class="mut">No pitches logged yet</td></tr>'}</table></div></div>
+ <div class="card"><h3>Add outside pitches (other games/leagues)</h3><div class="row"><input id="ml_n" placeholder="Pitcher name"><input id="ml_t" placeholder="Team (match scorebook name)"><input id="ml_d" type="date" value="${today}"><input id="ml_c" type="number" placeholder="Pitches" style="width:90px"><button class="b sm p" onclick="addLog()">Add</button></div>
+  ${D.pitchLog.map(l=>`<div class="row">${esc(l.date)} — ${esc(l.name)} (${esc(l.team)}): ${l.count} <button class="b sm" onclick="D.pitchLog=D.pitchLog.filter(x=>x.id!=='${l.id}');save();render()">✕</button></div>`).join('')}</div>
+ <div class="card"><h3>Pitch log (all games)</h3><table><tr><th>Date</th><th class="l">Pitcher</th><th>Pitches</th><th>In window</th></tr>${E.pitchEntries(D.games,D.pitchLog).sort((a,b)=>b.date.localeCompare(a.date)).map(e=>`<tr><td>${e.date}</td><td class="l">${esc(e.name)} <span class="mut">${esc(e.team)}</span></td><td>${e.count}</td><td>${E.inWindow(e.date,today)?'✓':'—'}</td></tr>`).join('')}</table></div>`}
+function addLog(){const n=$('#ml_n').value.trim(),c=+$('#ml_c').value;if(!n||!c)return;D.pitchLog.push({id:E.uid(),name:n,team:$('#ml_t').value.trim(),date:$('#ml_d').value,count:c});save();render()}
+function vData(g){return`<div class="card"><h3>Games</h3><button class="b p" onclick="D.cur=null;tab='game';render()">+ New game</button>
+ ${D.games.slice().reverse().map(x=>{const S=E.replay(x);return`<div class="row"><b style="flex:1">${x.date}: ${esc(x.away.name)} ${S.R.away} @ ${esc(x.home.name)} ${S.R.home}${x.id===D.cur?' (open)':''}</b>
+ <button class="b sm" onclick="D.cur='${x.id}';tab='game';save();render()">Open</button><button class="b sm" onclick="confirm('Delete this game?')&&(D.games=D.games.filter(y=>y.id!=='${x.id}'),D.cur=D.cur==='${x.id}'?null:D.cur,save(),render())">Delete</button></div>`}).join('')}</div>
+ <div class="card"><h3>Export / Import</h3><div class="row"><button class="b" onclick="dl('scorebook.json',JSON.stringify(D,null,1),'application/json')">Export all (JSON)</button>
+ <button class="b" onclick="csv()">Season stats (CSV)</button><button class="b" onclick="pcsv()">Pitch log (CSV)</button>
+ <label class="b">Import JSON<input type="file" accept=".json" hidden onchange="imp(this.files[0])"></label></div><p class="mut">All data is stored only in this browser (localStorage). Export regularly as a backup.</p></div>`}
+function dl(n,t,m){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:m}));a.download=n;a.click()}
+const cq=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+function csv(){const H='team,name,G,PA,AB,R,H,1B,2B,3B,HR,RBI,BB,HBP,K,SB,CS,SF,SH,AVG,OBP,SLG,OPS,PO,A,E,FLD'.split(',');
+ const rows=Object.values(E.season(D.games)).map(r=>({...r,...E.rates(r)}));dl('season_stats.csv',[H.join(',')].concat(rows.map(r=>H.map(k=>['AVG','OBP','SLG','OPS','FLD'].includes(k)?(r[k]==null?'':r[k].toFixed(3)):cq(r[k])).join(','))).join('\n'),'text/csv')}
+function pcsv(){dl('pitch_log.csv',['date,team,pitcher,pitches,source'].concat(E.pitchEntries(D.games,D.pitchLog).map(e=>[e.date,cq(e.team),cq(e.name),e.count,e.manual?'manual':'game'].join(','))).join('\n'),'text/csv')}
+function imp(f){if(!f)return;f.text().then(t=>{try{const d=JSON.parse(t);if(!d.games)throw 0;if(confirm('Replace all data with this file?')){D=d;D.settings=D.settings||{weeklyMax:85,gameMax:'',warnPct:75};D.pitchLog=D.pitchLog||[];save();render()}}catch(e){alert('Not a valid scorebook file')}})}
+render();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script></body></html>
