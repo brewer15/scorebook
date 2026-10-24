@@ -36,6 +36,7 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{border-bottom:1px
 #undo{position:fixed;right:12px;bottom:12px;z-index:9;border-radius:999px;padding:14px 22px;box-shadow:0 3px 10px #0005}
 .big{min-height:72px;font-size:18px}.badge{background:var(--acc);color:#fff;font-weight:800;text-align:center;border-radius:10px;padding:6px;margin-top:6px}.badge.f{background:var(--ok)}
 .sheet{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--card);border-top:2px solid var(--acc);padding:12px;box-shadow:0 -6px 20px #0006;max-width:900px;margin:auto}
+.nowbat{background:#263238;color:#fff;border-radius:12px;padding:10px 12px;margin:6px 0;cursor:pointer}.nowbat.mine{background:var(--acc)}
 svg .base{stroke:var(--fg);stroke-width:2;fill:var(--card)}svg .base.on{fill:var(--warn)}
 </style></head><body>
 <header><nav id="nav"></nav></header>
@@ -58,15 +59,16 @@ const IN_PLAY=new Set(['1B','2B','3B','HR','GO','FO','LO','PO','FC','E','SF','SH
 function blankStat(){return{PA:0,AB:0,R:0,H:0,'1B':0,'2B':0,'3B':0,HR:0,RBI:0,BB:0,HBP:0,K:0,SB:0,CS:0,SF:0,SH:0,PO:0,A:0,E:0}}
 function replay(g){
  const S={half:0,outs:0,b:0,s:0,bases:[null,null,null],halfRuns:0,order:{away:0,home:0},line:{away:[],home:[]},H:{away:0,home:0},E:{away:0,home:0},
-  teams:{away:clone(g.away.roster),home:clone(g.home.roster)},pitcher:{away:null,home:null},pc:{},st:{},log:[],notice:'',over:false,capHit:false,players:{}};
+  gen:g.genNames||{},teams:{away:clone(g.away.roster),home:clone(g.home.roster)},pitcher:{away:null,home:null},pc:{},st:{},log:[],notice:'',over:false,capHit:false,players:{}};
  const reg=()=>{for(const t of ['away','home'])for(const p of S.teams[t])S.players[p.id]={...p,team:t}};reg();
  for(const ev of g.events){S.notice='';apply(S,g,ev);reg()}
+ for(const t of ['away','home'])for(let n=1;n<=9;n++){const id=t+'_gen'+n;if(S.st[id]&&!S.players[id]){const nm=((S.gen||{})[t]||{})[n]||{};S.players[id]={id,name:nm.name||'Batter '+n,num:nm.num||'',pos:'',team:t,gen:true,slot:n,named:!!nm.name}}}
  S.inning=Math.floor(S.half/2)+1;S.bat=S.half%2?'home':'away';S.fld=S.half%2?'away':'home';
  S.batter=curBatter(S);S.curPitcher={away:curPitcher(S,'away'),home:curPitcher(S,'home')};
  S.R={away:sum(S.line.away),home:sum(S.line.home)};return S}
 const sum=a=>a.reduce((x,y)=>x+(y||0),0);
 const lineup=(S,t)=>S.teams[t].filter(p=>p.pos!=='BN');
-function curBatter(S){const t=S.half%2?'home':'away',L=lineup(S,t);if(L.length)return L[S.order[t]%L.length];const n=S.order[t]%9+1,id=t+'_gen'+n;S.players[id]=S.players[id]||{id,name:'Batter '+n,num:'',pos:'',team:t,gen:true};return S.players[id]}
+function curBatter(S){const t=S.half%2?'home':'away',L=lineup(S,t);if(L.length)return L[S.order[t]%L.length];const n=S.order[t]%9+1,id=t+'_gen'+n,nm=((S.gen||{})[t]||{})[n]||{};S.players[id]={id,name:nm.name||'Batter '+n,num:nm.num||'',pos:'',team:t,gen:true,slot:n,named:!!nm.name};return S.players[id]}
 function curPitcher(S,t){const id=S.pitcher[t];if(id&&S.teams[t].some(p=>p.id===id))return id;const p=S.teams[t].find(p=>p.pos==='P');return p?p.id:null}
 const st=(S,id)=>id?(S.st[id]=S.st[id]||blankStat()):blankStat();
 const nm=(S,id)=>{const p=S.players[id];return p?(p.num?'#'+p.num+' ':'')+p.name:'?'};
@@ -147,7 +149,7 @@ function apply(S,g,ev){
 function rates(x){const TB=x['1B']+2*x['2B']+3*x['3B']+4*x.HR;const avg=x.AB?x.H/x.AB:0,obpD=x.AB+x.BB+x.HBP+x.SF,obp=obpD?(x.H+x.BB+x.HBP)/obpD:0,slg=x.AB?TB/x.AB:0;
  const ch=x.PO+x.A+x.E;return{AVG:avg,OBP:obp,SLG:slg,OPS:obp+slg,TB,FLD:ch?(x.PO+x.A)/ch:null}}
 const f3=v=>v==null?'—':(v>=1?v.toFixed(3):v.toFixed(3).replace(/^0/,''));
-function season(games){const out={};for(const g of games){const S=replay(g);for(const id in S.players){const p=S.players[id];if(p.gen)continue;const key=(g[p.team].name+'|'+p.name).toLowerCase();
+function season(games){const out={};for(const g of games){const S=replay(g);for(const id in S.players){const p=S.players[id];if(p.gen&&!p.named)continue;const key=(g[p.team].name+'|'+p.name).toLowerCase();
   const o=out[key]=out[key]||{team:g[p.team].name,name:p.name,num:p.num,G:0,...blankStat()};const x=S.st[id];if(!x)continue;o.G++;for(const k in x)o[k]+=x[k]}}return out}
 /* --- pitch count rolling window (day granularity) --- */
 function dayNum(s){const[y,m,d]=s.split('-').map(Number);return Math.round(Date.UTC(y,m-1,d)/864e5)}
@@ -194,6 +196,16 @@ function nav(){$('#nav').innerHTML=TABS.map(([k,v])=>`<button class="${k===tab?'
 function render(){nav();const g=G();$('#undo').style.display=(tab==='game'&&g&&g.events.length)?'':'none';
  $('#app').innerHTML=(!g&&tab!=='data'&&tab!=='pitch'&&tab!=='stats')?newGameForm():({game:vGame,lineups:vLineups,stats:vStats,pitch:vPitch,data:vData}[tab])(g)}
 let pend=null,endSheet=false;
+function banner(g,S){const b=S.batter;if(!b)return'';const t=S.bat,L=E.lineup(S,t);let nx;
+ if(L.length)nx=L[(S.order[t]+1)%L.length];else{const n=(S.order[t]+1)%9+1,m=((g.genNames||{})[t]||{})[n]||{};nx={name:m.name||'Batter '+n}}
+ const x=S.st[b.id];const mine=g.myTeam===t;
+ return`<div class="nowbat ${mine?'mine':''}" ${b.gen?`onclick="nameGen('${t}',${b.slot})"`:''}><div class="mut" style="color:inherit;opacity:.8">NOW BATTING · ${esc(g[t].name)}${b.gen?' · tap to name':''}</div>
+ <div style="font-size:28px;font-weight:900;line-height:1.1">${b.num?'#'+esc(b.num)+' ':''}${esc(b.name)} <span style="font-size:16px;opacity:.8">${esc(b.pos||'')}</span>${b.gen?' ✎':''}</div>
+ <div style="font-size:14px">Today: ${todayLine(x).replace(/<span class="mut">/,'<span style="opacity:.8">')}</div><div style="font-size:13px;opacity:.85">On deck: ${esc(nx.name)}</div></div>`}
+function nameGen(t,n){const g=G();g.genNames=g.genNames||{};g.genNames[t]=g.genNames[t]||{};const cur=g.genNames[t][n]||{};
+ const v=prompt('Batter '+n+' — number and name (e.g. "12 Sam")',((cur.num?cur.num+' ':'')+(cur.name||'')).trim());if(v==null)return;
+ const m=v.trim().match(/^#?(\d+)?\s*(.*)$/);const rec={num:m[1]||'',name:(m[2]||'').trim()};if(!rec.name&&!rec.num){delete g.genNames[t][n]}else{if(!rec.name)rec.name='Batter '+n;g.genNames[t][n]=rec}
+ D.oppNames=D.oppNames||{};const k=g[t].name.toLowerCase();D.oppNames[k]=D.oppNames[k]||{};if(g.genNames[t][n])D.oppNames[k][n]=g.genNames[t][n];else delete D.oppNames[k][n];save();render()}
 function endBtn(){return`<button class="b r" style="width:100%;margin-top:6px;min-height:40px" onclick="endSheet={reason:''};render()">■ End Game</button>${endSheet?endSheetHtml():''}`}
 function endSheetHtml(){const R=['Weather','Time limit','Mercy/run rule','Other'];return`<div class="sheet"><div class="row"><b style="flex:1">End game now?</b><button class="b sm" onclick="endSheet=false;render()">Cancel</button></div>
  <div class="mut">Stats and pitch counts so far are kept. Undo can reopen the game.</div>
@@ -238,9 +250,7 @@ function runnersCard(S){const rs=S.bases.map((r,i)=>r?`<div class="row"><b style
 function todayLine(x){x=x||E.blankStat();const r=E.rates(x);return`${x.H}-for-${x.AB}${x['2B']?`, ${x['2B']} 2B`:''}${x['3B']?`, ${x['3B']} 3B`:''}${x.HR?`, ${x.HR} HR`:''}${x.RBI?`, ${x.RBI} RBI`:''}${x.R?`, ${x.R} R`:''}${x.BB?`, ${x.BB} BB`:''}${x.HBP?`, ${x.HBP} HBP`:''}${x.K?`, ${x.K} K`:''}${x.SB?`, ${x.SB} SB`:''} <span class="mut">(PA ${x.PA}, AVG ${E.f3(r.AVG)})</span>`}
 function lastLog(S){return`<div class="card"><div class="log" style="max-height:120px">${S.log.slice(-6).reverse().map(l=>`<div>${esc(l)}</div>`).join('')||'<span class="mut">No plays yet</span>'}</div></div>`}
 function vBat(g,S){const b=S.batter,L=E.lineup(S,S.bat),nx=L.length?L[(S.order[S.bat]+1)%L.length]:null;
- return`${myToggle(g)}<div class="badge">🏏 BATTING</div>${mini(g,S)}
- <div class="card"><div class="mut">Now batting</div><div class="cnt">${b?esc((b.num?'#'+b.num+' ':'')+b.name):'(set lineup)'} <span class="mut">${b?esc(b.pos):''}</span></div>
-  <div>Today: ${todayLine(b&&S.st[b.id])}</div><div class="mut">On deck: ${nx?esc(nx.name):'—'}</div></div>
+ return`${banner(g,S)}${myToggle(g)}<div class="badge">🏏 BATTING</div>${mini(g,S)}
  <div class="card">${PB}</div>
  <div class="card"><h3>Result</h3><div class="grid">${RB('1B','1B','p')}${RB('2B','2B','p')}${RB('3B','3B','p')}${RB('HR','HR','p')}${RB('BB','BB')}${RB('HBP','HBP')}${RB('KS','K swing')}${RB('KL','K look')}
  ${RB('GO','Ground out')}${RB('FO','Fly out')}${RB('LO','Line out')}${RB('PO','Pop out')}${RB('FC','FC')}${RB('SF','Sac fly')}${RB('SH','Sac bunt')}${RB('DP','DP')}</div>
@@ -249,7 +259,7 @@ function vBat(g,S){const b=S.batter,L=E.lineup(S,S.bat),nx=L.length?L[(S.order[S
 function vField(g,S){const me=g.myTeam,pid=S.curPitcher[me],b=S.batter;const ps=S.teams[me];
  const s=D.settings,rm=rollMap(),p=pid&&S.players[pid],r=p&&rm[(g[me].name+'|'+p.name).toLowerCase()];const n=pid?(S.pc[pid]||0):0;
  const lv=Math.max(E.level(n,+s.gameMax||0,s.warnPct),r?E.level(r.total,+s.weeklyMax,s.warnPct):0);
- return`${myToggle(g)}<div class="badge f">🧤 FIELDING</div>${mini(g,S)}
+ return`${banner(g,S)}${myToggle(g)}<div class="badge f">🧤 FIELDING</div>${mini(g,S)}
  <div class="card"><div class="row"><select style="flex:1" onchange="push({t:'pitcher',team:'${me}',pid:this.value})"><option value="">Pick pitcher…</option>${ps.map(x=>`<option value="${x.id}" ${x.id===pid?'selected':''}>${esc(x.name)}${x.pos==='P'?' (P)':''}</option>`).join('')}</select></div>
   ${pid?`<div class="row"><span class="pill s${lv}" style="font-size:22px;padding:6px 16px">${n}</span><span>pitches today${s.gameMax?' / '+s.gameMax:''}<br><span class="mut">7-day: ${r?r.total:n}${s.weeklyMax?' / '+s.weeklyMax:''}${r&&r.drops[0]?` · −${r.drops[0].count} on ${r.drops[0].date}`:''}</span></span>
    <span style="margin-left:auto"><button class="b sm" onclick="push({t:'pcadj',pid:'${pid}',d:-1})">−</button> <button class="b sm" onclick="push({t:'pcadj',pid:'${pid}',d:1})">+</button></span></div>${lv===3?'<div class="notice over">Pitch limit reached!</div>':''}`:''}</div>
@@ -276,6 +286,7 @@ function newGameForm(){return`<div class="card"><h3>New game</h3>
 function createGame(){const a=$('#ng_a').value||'Away',h=$('#ng_h').value||'Home';
  const prev=t=>{for(let i=D.games.length-1;i>=0;i--)for(const s of['away','home'])if(D.games[i][s].name.toLowerCase()===t.toLowerCase())return D.games[i][s].roster.map(p=>({...p,id:E.uid()}));return[]};
  const g=E.newGame({awayName:a,homeName:h,date:$('#ng_d').value,innings:+$('#ng_i').value||6,maxRunsOn:$('#ng_mr').checked,maxRuns:+$('#ng_m').value||5,myTeam:$('#ng_my').value,away:prev(a),home:prev(h)});
+ for(const s of['away','home']){const o=(D.oppNames||{})[g[s].name.toLowerCase()];if(o&&!g[s].roster.length){g.genNames=g.genNames||{};g.genNames[s]=JSON.parse(JSON.stringify(o))}}
  D.games.push(g);D.cur=g.id;save();tab=g.away.roster.length&&g.home.roster.length?'game':'lineups';render()}
 function pcPill(n,id,S){const s=D.settings,g=G();let lv=E.level(n,+s.gameMax||0,s.warnPct);
  const p=S.players[id];if(p){const r=rollMap()[(g[p.team].name+'|'+p.name).toLowerCase()];if(r)lv=Math.max(lv,E.level(r.total,+s.weeklyMax,s.warnPct));
@@ -293,7 +304,7 @@ function vFull(g){const S=E.replay(g),inn=Math.max(g.innings,S.inning);
  const R=(k,l,c)=>`<button class="b ${c||''}" onclick="res('${k}')">${l}</button>`;
  const runners=S.bases.map((r,i)=>r?`<div class="row"><b style="width:46px">${['1st','2nd','3rd'][i]}</b><span style="flex:1">${esc(S.players[r]?.name)}</span>
   ${['adv','score','out','SB','CS'].map(a=>`<button class="b sm" onclick="push({t:'run',base:${i},a:'${a}'})">${{adv:'Adv',score:'Score',out:'Out',SB:'SB',CS:'CS'}[a]}</button>`).join('')}</div>`:'').join('')||'<span class="mut">Bases empty</span>';
- return`${myToggle(g)}<div class="card scroll">${ls}</div>
+ return`${banner(g,S)}${myToggle(g)}<div class="card scroll">${ls}</div>
  ${S.notice?`<div class="notice ${S.over?'over':''}">${esc(S.notice)}</div>`:''}${S.over&&!S.notice?`<div class="notice over">${esc(S.overMsg)}</div>`:''}
  <div class="card sb">${diamond(S.bases)}<div><div class="cnt">${S.half%2?'▼':'▲'} ${S.inning} &nbsp; ${S.b}-${S.s} &nbsp; ${S.outs} out</div>
   <div>At bat: <b>${bt?esc((bt.num?'#'+bt.num+' ':'')+bt.name):'(set lineup)'}</b> <span class="mut">${esc(g[S.bat].name)}</span></div>
